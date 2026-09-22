@@ -215,3 +215,6 @@ export const GovHeader: React.FC = () => {
     </header>
   );
 };
+
+export const GovernmentHeader = GovHeader;
+export default GovHeader;
