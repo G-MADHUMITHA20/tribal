@@ -4,7 +4,7 @@ from typing import List, Optional
 from fastapi import APIRouter, HTTPException, status, Depends, UploadFile, File, Form
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from app.database.mongodb import get_database
-from app.core.security import get_current_user_payload
+from app.core.security import get_current_user
 from app.schemas.document import DocumentType, DocumentMetadata, DocumentUploadResponse
 
 router = APIRouter(prefix="/documents", tags=["Documents"])
@@ -14,15 +14,31 @@ async def upload_document(
     application_id: str = Form(..., description="Target Application ID"),
     document_type: DocumentType = Form(..., description="Supported certificate category"),
     file: UploadFile = File(..., description="PDF or image scan of document"),
-    payload: dict = Depends(get_current_user_payload),
+    current_user: dict = Depends(get_current_user),
     db: AsyncIOMotorDatabase = Depends(get_database)
 ):
     """
     Register and store uploaded document metadata.
-    Architecture prepared for AWS S3 / MinIO object storage integration.
-    Large binaries are not stored directly in MongoDB.
+    Enforces that the authenticated citizen owns the targeted application dossier.
     """
-    user_id = payload.get("sub")
+    user_id = current_user["_id"]
+    user_role = current_user.get("role")
+
+    # Verify target application exists
+    application = await db["applications"].find_one({"_id": application_id})
+    if not application:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Target application '{application_id}' does not exist."
+        )
+
+    # If applicant, verify ownership
+    if user_role == "APPLICANT" and application.get("user_id") != user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Unauthorized: You cannot upload documents to another applicant's application dossier."
+        )
+
     doc_id = "DOC-" + uuid.uuid4().hex[:10].upper()
     now = datetime.now(timezone.utc)
 
@@ -30,7 +46,6 @@ async def upload_document(
     file_bytes = await file.read()
     file_size = len(file_bytes)
 
-    # In production, file_bytes are streamed to S3 bucket e.g. s3://tsfms-documents/{application_id}/{doc_id}.pdf
     storage_path = f"s3://tsfms-documents/{application_id}/{doc_id}_{file.filename}"
 
     doc_record = {
@@ -63,13 +78,65 @@ async def upload_document(
 @router.get("/application/{application_id:path}", response_model=List[DocumentMetadata])
 async def get_documents_by_application(
     application_id: str,
-    payload: dict = Depends(get_current_user_payload),
+    current_user: dict = Depends(get_current_user),
     db: AsyncIOMotorDatabase = Depends(get_database)
 ):
     """
     Retrieve all document records and storage pointers for a given application ID.
+    Enforces authorization check: Applicants can ONLY access documents for their own applications.
     """
+    user_id = current_user["_id"]
+    user_role = current_user.get("role")
+
+    # Verify target application exists
+    application = await db["applications"].find_one({"_id": application_id})
+    if not application:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Application '{application_id}' does not exist."
+        )
+
+    # If applicant, verify ownership
+    if user_role == "APPLICANT" and application.get("user_id") != user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Unauthorized: You do not have permission to view documents belonging to another applicant."
+        )
+
     cursor = db["documents"].find({"application_id": application_id})
     docs = await cursor.to_list(length=50)
 
     return [DocumentMetadata(**d) for d in docs]
+
+@router.get("/{document_id:path}", response_model=DocumentMetadata)
+async def get_document_by_id(
+    document_id: str,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncIOMotorDatabase = Depends(get_database)
+):
+    """
+    Retrieve single document metadata by document ID.
+    Verifies document and associated application ownership.
+    """
+    user_id = current_user["_id"]
+    user_role = current_user.get("role")
+
+    doc = await db["documents"].find_one({"_id": document_id})
+    if not doc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Document '{document_id}' does not exist."
+        )
+
+    if user_role == "APPLICANT":
+        # Check direct user_id match or application ownership
+        if doc.get("user_id") != user_id:
+            app = await db["applications"].find_one({"_id": doc.get("application_id")})
+            if not app or app.get("user_id") != user_id:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Unauthorized: You do not have permission to access this document."
+                )
+
+    return DocumentMetadata(**doc)
+

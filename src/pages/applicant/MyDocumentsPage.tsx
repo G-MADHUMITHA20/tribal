@@ -9,7 +9,20 @@ export const MyDocumentsPage: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState<'ST' | 'INC' | 'MARK'>('ST');
 
-  if (!app) return <div>No active application documents.</div>;
+  if (!app) {
+    return (
+      <div className="bg-white p-8 rounded-lg border border-slate-300 shadow-sm text-center space-y-4">
+        <div className="w-12 h-12 bg-blue-50 border border-blue-200 text-[#0b2853] rounded-full flex items-center justify-center mx-auto">
+          <FileText className="w-6 h-6" />
+        </div>
+        <h2 className="text-lg font-bold text-[#0b2853]">No Uploaded Documents Found</h2>
+        <p className="text-xs text-slate-600 max-w-md mx-auto">
+          You currently have no application documents in your vault. When you apply for a scheme, uploaded statutory certificates and AI OCR verification records will appear here securely.
+        </p>
+      </div>
+    );
+  }
+
 
   return (
     <div className="space-y-6">

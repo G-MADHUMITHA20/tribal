@@ -1,15 +1,21 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { StatusTimeline } from '../../components/applicant/StatusTimeline';
-import { ExplainableEvidenceCard } from '../../components/document-ai/ExplainableEvidenceCard';
-import { Clock, Search, ShieldCheck, History, AlertTriangle, Upload } from 'lucide-react';
+import { History, Upload, FileText, AlertCircle } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 export const StatusTrackerPage: React.FC = () => {
-  const { applications, currentApplicantApplication, resolveApplicationDeficiency } = useApp();
+  const { applications, currentApplicantApplication, resolveApplicationDeficiency, isLoadingApplications } = useApp();
   const [searchId, setSearchId] = useState<string>('');
-  const [selectedApp, setSelectedApp] = useState(currentApplicantApplication || applications[0]);
+  const [selectedApp, setSelectedApp] = useState(currentApplicantApplication || applications[0] || null);
   const [isResolveModalOpen, setIsResolveModalOpen] = useState<boolean>(false);
   const [replacementFile, setReplacementFile] = useState<string>('Income_Certificate_Tehsildar_FY2024-25_Renewed.pdf');
+
+  useEffect(() => {
+    if (!selectedApp && (currentApplicantApplication || applications.length > 0)) {
+      setSelectedApp(currentApplicantApplication || applications[0]);
+    }
+  }, [currentApplicantApplication, applications]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -20,7 +26,7 @@ export const StatusTrackerPage: React.FC = () => {
       if (match) {
         setSelectedApp(match);
       } else {
-        alert(`No application found matching "${searchId}". Showing demo records.`);
+        alert(`No application matching "${searchId}" found in your registered dossiers.`);
       }
     }
   };
@@ -31,6 +37,37 @@ export const StatusTrackerPage: React.FC = () => {
     resolveApplicationDeficiency(selectedApp.id, replacementFile);
     setIsResolveModalOpen(false);
   };
+
+  if (isLoadingApplications) {
+    return (
+      <div role="status" aria-live="polite" className="bg-white p-12 rounded-lg border border-slate-300 text-center space-y-3">
+        <div className="w-10 h-10 border-4 border-blue-900 border-t-amber-500 rounded-full animate-spin mx-auto" />
+        <p className="text-sm font-bold text-[#0b2853]">Retrieving tracking status from official registry...</p>
+      </div>
+    );
+  }
+
+  if (!selectedApp) {
+    return (
+      <div className="bg-white p-8 rounded-lg border border-slate-300 shadow-sm text-center space-y-4">
+        <div className="w-12 h-12 bg-blue-50 border border-blue-200 text-[#0b2853] rounded-full flex items-center justify-center mx-auto">
+          <FileText className="w-6 h-6" />
+        </div>
+        <h2 className="text-lg font-bold text-[#0b2853]">No Submitted Applications to Track</h2>
+        <p className="text-xs text-slate-600 max-w-md mx-auto">
+          You currently have no active applications registered in your citizen account. Submit a new application to initiate status tracking.
+        </p>
+        <div>
+          <Link
+            to="/applicant/apply"
+            className="inline-flex items-center px-4 py-2.5 bg-[#0b2853] hover:bg-[#134685] text-white text-xs font-bold rounded shadow uppercase tracking-wider"
+          >
+            Apply for Scholarship
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -48,45 +85,49 @@ export const StatusTrackerPage: React.FC = () => {
           </p>
         </div>
 
-        {/* Quick Search input */}
-        <form onSubmit={handleSearch} className="flex items-center gap-2">
-          <input
-            type="text"
-            placeholder="Search Application ID..."
-            value={searchId}
-            onChange={(e) => setSearchId(e.target.value)}
-            className="p-2 text-xs bg-slate-50 border border-slate-300 rounded font-mono w-48 sm:w-60 focus:outline-none focus:ring-2 focus:ring-blue-800"
-          />
-          <button
-            type="submit"
-            className="px-3.5 py-2 bg-[#0b2853] text-white font-bold text-xs rounded hover:bg-[#134685]"
-          >
-            Search
-          </button>
-        </form>
+        {/* Search within own applications */}
+        {applications.length > 1 && (
+          <form onSubmit={handleSearch} className="flex items-center gap-2">
+            <input
+              type="text"
+              placeholder="Search your Application ID..."
+              value={searchId}
+              onChange={(e) => setSearchId(e.target.value)}
+              className="p-2 text-xs bg-slate-50 border border-slate-300 rounded font-mono w-48 sm:w-60 focus:outline-none focus:ring-2 focus:ring-blue-800"
+            />
+            <button
+              type="submit"
+              className="px-3.5 py-2 bg-[#0b2853] text-white font-bold text-xs rounded hover:bg-[#134685]"
+            >
+              Search
+            </button>
+          </form>
+        )}
       </div>
 
-      {/* Select Application from demo list */}
-      <div className="bg-slate-100 p-3 rounded border border-slate-300 flex items-center justify-between gap-2 text-xs overflow-x-auto">
-        <span className="font-bold text-slate-700 whitespace-nowrap">
-          Quick Demo Applications:
-        </span>
-        <div className="flex items-center gap-2">
-          {applications.map((app) => (
-            <button
-              key={app.id}
-              onClick={() => setSelectedApp(app)}
-              className={`px-2.5 py-1 rounded text-[11px] font-semibold transition-colors whitespace-nowrap ${
-                selectedApp.id === app.id
-                  ? 'bg-blue-900 text-white shadow'
-                  : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-200'
-              }`}
-            >
-              {app.applicant.fullName} ({app.status.replace(/_/g, ' ')})
-            </button>
-          ))}
+      {/* If applicant has multiple applications, allow selecting among their own */}
+      {applications.length > 1 && (
+        <div className="bg-slate-100 p-3 rounded border border-slate-300 flex items-center justify-between gap-2 text-xs overflow-x-auto">
+          <span className="font-bold text-slate-700 whitespace-nowrap">
+            Your Applications:
+          </span>
+          <div className="flex items-center gap-2">
+            {applications.map((app) => (
+              <button
+                key={app.id}
+                onClick={() => setSelectedApp(app)}
+                className={`px-2.5 py-1 rounded text-[11px] font-semibold transition-colors whitespace-nowrap ${
+                  selectedApp.id === app.id
+                    ? 'bg-blue-900 text-white shadow'
+                    : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-200'
+                }`}
+              >
+                {app.id} ({app.status.replace(/_/g, ' ')})
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* 8-Stage Timeline */}
       <StatusTimeline
@@ -104,7 +145,7 @@ export const StatusTrackerPage: React.FC = () => {
         </div>
 
         <div className="divide-y divide-slate-200">
-          {selectedApp.auditTrail.map((record) => (
+          {(selectedApp.auditTrail || []).map((record) => (
             <div key={record.id} className="p-3.5 hover:bg-slate-50 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div>
                 <div className="flex items-center gap-2 mb-0.5">

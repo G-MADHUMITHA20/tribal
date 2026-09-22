@@ -57,11 +57,17 @@ export const ApplicantLayout: React.FC = () => {
                   </span>
                 </div>
                 <div className="text-[11px] text-slate-300 flex flex-wrap items-center gap-3 mt-0.5">
-                  <span>Application: <strong>{app?.id || 'MOTA/2025/APP-NEW'}</strong></span>
-                  <span>Scheme: <strong>{app?.schemeCode || 'MoTA Flagship'}</strong></span>
-                  <span className="text-emerald-400 flex items-center gap-1 font-semibold">
-                    <ShieldCheck className="w-3 h-3" /> DBT Aadhaar Seeded
-                  </span>
+                  {app ? (
+                    <>
+                      <span>Application: <strong>{app.id}</strong></span>
+                      <span>Scheme: <strong>{app.schemeCode}</strong></span>
+                      <span className="text-emerald-400 flex items-center gap-1 font-semibold">
+                        <ShieldCheck className="w-3 h-3" /> DBT Aadhaar Seeded
+                      </span>
+                    </>
+                  ) : (
+                    <span className="text-slate-400 italic">No application submitted yet. Click Apply to start.</span>
+                  )}
                 </div>
               </div>
             </div>

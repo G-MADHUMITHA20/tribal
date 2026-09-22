@@ -1,0 +1,247 @@
+from datetime import datetime, timezone
+from typing import List, Optional, Dict, Any
+from fastapi import APIRouter, HTTPException, status, Depends
+from motor.motor_asyncio import AsyncIOMotorDatabase
+from pydantic import BaseModel, Field
+
+from app.database.mongodb import get_database
+from app.core.security import require_officer_or_admin
+from app.schemas.application import ApplicationResponse, ApplicationStatus
+from app.schemas.grievance import GrievanceResponse, GrievanceStatus
+
+router = APIRouter(prefix="/admin", tags=["Admin & Analytics"])
+
+class AdminDashboardStats(BaseModel):
+    totalApplications: int = 0
+    submitted: int = 0
+    underVerification: int = 0
+    eligible: int = 0
+    deficient: int = 0
+    selected: int = 0
+    approved: int = 0
+
+class SchemeStatItem(BaseModel):
+    name: str
+    code: str
+    applications: int = 0
+    sanctioned: int = 0
+
+class StatusUpdatePayload(BaseModel):
+    status: ApplicationStatus
+    remarks: Optional[str] = None
+    officer_name: Optional[str] = None
+
+class SystemAuditLogItem(BaseModel):
+    id: str
+    timestamp: datetime
+    actor: str
+    role: str
+    action: str
+    applicationId: Optional[str] = None
+    schemeCode: Optional[str] = None
+    previousStatus: Optional[str] = None
+    newStatus: Optional[str] = None
+    reason: Optional[str] = None
+    remarks: Optional[str] = None
+    ipAddress: Optional[str] = None
+
+@router.get("/dashboard/stats", response_model=AdminDashboardStats)
+async def get_admin_dashboard_stats(
+    current_user: dict = Depends(require_officer_or_admin),
+    db: AsyncIOMotorDatabase = Depends(get_database)
+):
+    """
+    Calculate real-time operational statistics directly from MongoDB.
+    Restricted to authorized Officer and Admin roles.
+    """
+    total = await db["applications"].count_documents({})
+    submitted = await db["applications"].count_documents({"status": "SUBMITTED"})
+    under_verification = await db["applications"].count_documents({
+        "status": {"$in": ["DOCUMENT_VERIFICATION", "ELIGIBILITY_VERIFICATION", "SCRUTINY", "DOC_VERIFICATION_PENDING", "INSTITUTE_VERIFIED"]}
+    })
+    eligible = await db["applications"].count_documents({
+        "status": {"$in": ["DOC_VERIFIED", "SCRUTINY_PASSED", "PROPOSED_FOR_SELECTION"]}
+    })
+    deficient = await db["applications"].count_documents({
+        "$or": [{"has_deficiency": True}, {"status": "DEFICIENT"}, {"status": "DEFICIENCY_NOTIFIED"}]
+    })
+    selected = await db["applications"].count_documents({"status": {"$in": ["SELECTION", "PROPOSED_FOR_SELECTION"]}})
+    approved = await db["applications"].count_documents({"status": {"$in": ["APPROVED", "SANCTIONED", "DISBURSED_DBT"]}})
+
+    return AdminDashboardStats(
+        totalApplications=total,
+        submitted=submitted,
+        underVerification=under_verification,
+        eligible=eligible,
+        deficient=deficient,
+        selected=selected,
+        approved=approved
+    )
+
+@router.get("/dashboard/scheme-statistics", response_model=List[SchemeStatItem])
+async def get_scheme_statistics(
+    current_user: dict = Depends(require_officer_or_admin),
+    db: AsyncIOMotorDatabase = Depends(get_database)
+):
+    """
+    Calculate distribution of applications and sanctions by scheme from MongoDB.
+    Restricted to authorized Officer and Admin roles.
+    """
+    schemes_cursor = db["schemes"].find({})
+    schemes = await schemes_cursor.to_list(length=100)
+
+    stats: List[SchemeStatItem] = []
+    for s in schemes:
+        code = s.get("code")
+        name = s.get("short_name") or s.get("name")
+        count = await db["applications"].count_documents({
+            "$or": [{"scheme_id": s.get("id")}, {"scheme_id": code}]
+        })
+        sanctioned = await db["applications"].count_documents({
+            "$and": [
+                {"$or": [{"scheme_id": s.get("id")}, {"scheme_id": code}]},
+                {"status": {"$in": ["APPROVED", "SANCTIONED", "DISBURSED_DBT"]}}
+            ]
+        })
+        stats.append(SchemeStatItem(
+            name=name,
+            code=code,
+            applications=count,
+            sanctioned=sanctioned
+        ))
+
+    return stats
+
+@router.get("/applications", response_model=List[ApplicationResponse])
+async def get_all_applications(
+    status_filter: Optional[str] = None,
+    scheme_filter: Optional[str] = None,
+    current_user: dict = Depends(require_officer_or_admin),
+    db: AsyncIOMotorDatabase = Depends(get_database)
+):
+    """
+    List all applications for administrative scrutiny, review boards, and selection queues.
+    Protected strictly for Officer and Admin roles.
+    """
+    query: Dict[str, Any] = {}
+    if status_filter:
+        query["status"] = status_filter
+    if scheme_filter:
+        query["scheme_id"] = scheme_filter
+
+    cursor = db["applications"].find(query).sort("created_at", -1)
+    results = await cursor.to_list(length=500)
+    return [ApplicationResponse(**r) for r in results]
+
+@router.put("/applications/{application_id:path}/status", response_model=ApplicationResponse)
+async def update_application_status_officer(
+    application_id: str,
+    payload: StatusUpdatePayload,
+    user: dict = Depends(require_officer_or_admin),
+    db: AsyncIOMotorDatabase = Depends(get_database)
+):
+    """
+    Officer/Admin status transition for an application. Records audit log entry in MongoDB.
+    Enforces that only Officer and Admin roles can transition application statuses.
+    """
+    existing = await db["applications"].find_one({"_id": application_id})
+    if not existing:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Application '{application_id}' does not exist."
+        )
+
+    now = datetime.now(timezone.utc)
+    prev_status = existing.get("status")
+    has_deficiency = payload.status in [ApplicationStatus.DEFICIENT]
+    officer = payload.officer_name or user.get("name") or user.get("email") or "Authorized MoTA Officer"
+
+    update_fields = {
+        "status": payload.status.value,
+        "has_deficiency": has_deficiency,
+        "updated_at": now
+    }
+    if payload.remarks:
+        update_fields["officer_remarks"] = payload.remarks
+
+    await db["applications"].update_one({"_id": application_id}, {"$set": update_fields})
+
+    # Record in audit_logs collection
+    audit_entry = {
+        "_id": f"AUD-{int(now.timestamp() * 1000)}",
+        "id": f"AUD-{int(now.timestamp() * 1000)}",
+        "timestamp": now,
+        "actor": officer,
+        "role": user.get("role", "OFFICER"),
+        "action": f"Application Status Changed to {payload.status.value}",
+        "applicationId": application_id,
+        "schemeCode": existing.get("scheme_id"),
+        "previousStatus": prev_status,
+        "newStatus": payload.status.value,
+        "reason": payload.remarks or "Officer administrative review action",
+        "remarks": payload.remarks or "",
+        "ipAddress": "10.14.88.22 (MoTA NIC Gateway)"
+    }
+    await db["audit_logs"].insert_one(audit_entry)
+
+    updated_doc = await db["applications"].find_one({"_id": application_id})
+    return ApplicationResponse(**updated_doc)
+
+@router.get("/grievances", response_model=List[GrievanceResponse])
+async def get_all_grievances(
+    current_user: dict = Depends(require_officer_or_admin),
+    db: AsyncIOMotorDatabase = Depends(get_database)
+):
+    """
+    Retrieve all citizen grievances for the officer resolution queue.
+    Restricted to Officer and Admin roles.
+    """
+    cursor = db["grievances"].find({}).sort("created_at", -1)
+    results = await cursor.to_list(length=200)
+    return [GrievanceResponse(**r) for r in results]
+
+@router.put("/grievances/{grievance_id}", response_model=GrievanceResponse)
+async def resolve_grievance_officer(
+    grievance_id: str,
+    status_update: Dict[str, Any],
+    user: dict = Depends(require_officer_or_admin),
+    db: AsyncIOMotorDatabase = Depends(get_database)
+):
+    """
+    Update grievance status and resolution remarks.
+    Restricted to Officer and Admin roles.
+    """
+    existing = await db["grievances"].find_one({"_id": grievance_id})
+    if not existing:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Grievance '{grievance_id}' does not exist."
+        )
+
+    now = datetime.now(timezone.utc)
+    set_fields: Dict[str, Any] = {"updated_at": now}
+    if "status" in status_update:
+        set_fields["status"] = status_update["status"]
+    if "resolution_remarks" in status_update:
+        set_fields["resolution_remarks"] = status_update["resolution_remarks"]
+    if "assigned_officer" in status_update:
+        set_fields["assigned_officer"] = status_update["assigned_officer"]
+
+    await db["grievances"].update_one({"_id": grievance_id}, {"$set": set_fields})
+    updated = await db["grievances"].find_one({"_id": grievance_id})
+    return GrievanceResponse(**updated)
+
+@router.get("/audit-logs", response_model=List[SystemAuditLogItem])
+async def get_system_audit_logs(
+    limit: int = 50,
+    current_user: dict = Depends(require_officer_or_admin),
+    db: AsyncIOMotorDatabase = Depends(get_database)
+):
+    """
+    Retrieve system audit trails recorded in MongoDB audit_logs collection.
+    Restricted to Officer and Admin roles.
+    """
+    cursor = db["audit_logs"].find({}).sort("timestamp", -1)
+    results = await cursor.to_list(length=limit)
+    return [SystemAuditLogItem(**r) for r in results]
+

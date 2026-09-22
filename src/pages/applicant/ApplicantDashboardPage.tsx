@@ -19,20 +19,78 @@ import {
 import { Link } from 'react-router-dom';
 
 export const ApplicantDashboardPage: React.FC = () => {
-  const { currentApplicantApplication, resolveApplicationDeficiency, currentUser } = useApp();
+  const {
+    currentApplicantApplication,
+    resolveApplicationDeficiency,
+    currentUser,
+    isLoadingApplications,
+    applicationError,
+    fetchApplications
+  } = useApp();
+
   const [isResolveModalOpen, setIsResolveModalOpen] = useState(false);
   const [newCertFileName, setNewCertFileName] = useState('Income_Certificate_Tehsildar_FY2024-25_Signed.pdf');
   const [isSubmittingFix, setIsSubmittingFix] = useState(false);
 
   const app = currentApplicantApplication;
 
+  if (isLoadingApplications) {
+    return (
+      <div
+        role="status"
+        aria-live="polite"
+        className="bg-white p-12 rounded-lg border border-slate-300 shadow-sm text-center space-y-3"
+      >
+        <div className="w-10 h-10 border-4 border-blue-900 border-t-amber-500 rounded-full animate-spin mx-auto" />
+        <p className="text-sm font-bold text-[#0b2853]">Loading your scholarship dossiers from MoTA database...</p>
+        <p className="text-xs text-slate-500">Retrieving user-isolated records for {currentUser.email}</p>
+      </div>
+    );
+  }
+
+  if (applicationError) {
+    return (
+      <div
+        role="alert"
+        aria-live="polite"
+        className="bg-rose-50 border-2 border-rose-400 p-8 rounded-lg shadow-sm text-center space-y-4"
+      >
+        <div className="w-12 h-12 bg-rose-100 text-rose-700 rounded-full flex items-center justify-center mx-auto">
+          <AlertTriangle className="w-6 h-6" />
+        </div>
+        <h2 className="text-base font-extrabold text-rose-950">Unable to load your applications.</h2>
+        <p className="text-xs text-rose-800 max-w-md mx-auto">{applicationError}</p>
+        <div>
+          <button
+            onClick={fetchApplications}
+            className="px-5 py-2.5 bg-[#0b2853] hover:bg-[#134685] text-white text-xs font-bold rounded shadow transition-colors"
+          >
+            Retry Connection
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (!app) {
     return (
-      <div className="bg-white p-8 rounded border border-slate-300 text-center text-slate-600">
-        No active application found.
-        <div className="mt-4">
-          <Link to="/applicant/apply" className="px-4 py-2 bg-blue-900 text-white rounded text-xs font-bold">
-            Start New Application
+      <div className="bg-white p-8 rounded-lg border border-slate-300 shadow-sm text-center space-y-4">
+        <div className="w-12 h-12 bg-blue-50 border border-blue-200 text-[#0b2853] rounded-full flex items-center justify-center mx-auto">
+          <FileText className="w-6 h-6" />
+        </div>
+        <div>
+          <h2 className="text-lg font-bold text-[#0b2853]">No Active Applications Found</h2>
+          <p className="text-xs text-slate-600 mt-1 max-w-md mx-auto">
+            You do not have any active scholarship or fellowship applications under your citizen account (<strong>{currentUser.email}</strong>).
+          </p>
+        </div>
+        <div>
+          <Link
+            to="/applicant/apply"
+            className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-[#0b2853] hover:bg-[#134685] text-white text-xs font-bold rounded shadow uppercase tracking-wider transition-colors"
+          >
+            <Upload className="w-4 h-4" />
+            <span>Apply for a Scholarship Scheme</span>
           </Link>
         </div>
       </div>

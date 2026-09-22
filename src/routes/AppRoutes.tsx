@@ -14,8 +14,17 @@ import { ResourcesPage } from '../pages/public/ResourcesPage';
 import { AboutPage } from '../pages/public/AboutPage';
 import { ContactPage, HelpPage } from '../pages/public/ContactPage';
 
+// Authentication Pages
+import { LoginPage } from '../pages/auth/LoginPage';
+import { SignupPage } from '../pages/auth/SignupPage';
+import { ForgotPasswordPage } from '../pages/auth/ForgotPasswordPage';
+import { UnauthorizedPage } from '../pages/auth/UnauthorizedPage';
+
+// Route Guards
+import { ProtectedRoute } from '../components/auth/ProtectedRoute';
+import { RoleRoute } from '../components/auth/RoleRoute';
+
 // Applicant Pages
-import { ApplicantAuthPage } from '../pages/applicant/ApplicantAuthPage';
 import { ApplicantDashboardPage } from '../pages/applicant/ApplicantDashboardPage';
 import { ApplicationWizardPage } from '../pages/applicant/ApplicationWizardPage';
 import { StatusTrackerPage } from '../pages/applicant/StatusTrackerPage';
@@ -44,29 +53,47 @@ export const AppRoutes: React.FC = () => {
         <Route path="/grievances" element={<ApplicantGrievancesPage />} />
         <Route path="/contact" element={<ContactPage />} />
         <Route path="/help" element={<HelpPage />} />
-        <Route path="/applicant/login" element={<ApplicantAuthPage />} />
-        <Route path="/applicant/register" element={<ApplicantAuthPage />} />
+
+        {/* Dedicated Auth Routes */}
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/signup" element={<SignupPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/unauthorized" element={<UnauthorizedPage />} />
+
+        {/* Redirect Legacy Auth Paths */}
+        <Route path="/applicant/login" element={<Navigate to="/login" replace />} />
+        <Route path="/applicant/register" element={<Navigate to="/signup" replace />} />
       </Route>
 
-      {/* 2. Applicant Citizen Portal Routes */}
-      <Route path="/applicant" element={<ApplicantLayout />}>
-        <Route path="dashboard" element={<ApplicantDashboardPage />} />
-        <Route path="apply" element={<ApplicationWizardPage />} />
-        <Route path="status" element={<StatusTrackerPage />} />
-        <Route path="documents" element={<MyDocumentsPage />} />
-        <Route path="grievances" element={<ApplicantGrievancesPage />} />
+      {/* 2. Protected Applicant Citizen Portal Routes */}
+      <Route element={<ProtectedRoute />}>
+        <Route element={<RoleRoute allowedRoles={['APPLICANT']} />}>
+          <Route path="/applicant" element={<ApplicantLayout />}>
+            <Route index element={<Navigate to="dashboard" replace />} />
+            <Route path="dashboard" element={<ApplicantDashboardPage />} />
+            <Route path="apply" element={<ApplicationWizardPage />} />
+            <Route path="status" element={<StatusTrackerPage />} />
+            <Route path="documents" element={<MyDocumentsPage />} />
+            <Route path="grievances" element={<ApplicantGrievancesPage />} />
+          </Route>
+        </Route>
       </Route>
 
-      {/* 3. Officer & Admin Governance Routes */}
-      <Route path="/admin" element={<AdminLayout />}>
-        <Route index element={<AdminDashboardPage />} />
-        <Route path="applications" element={<ApplicationQueuePage />} />
-        <Route path="verification" element={<DocVerificationPage />} />
-        <Route path="deficiencies" element={<DocVerificationPage />} />
-        <Route path="selection" element={<SelectionBoardPage />} />
-        <Route path="scheme-configurator" element={<SchemeConfiguratorPage />} />
-        <Route path="audit-logs" element={<AuditLogsPage />} />
-        <Route path="grievances" element={<GrievanceQueuePage />} />
+      {/* 3. Protected Officer & Admin Governance Routes */}
+      <Route element={<ProtectedRoute />}>
+        <Route element={<RoleRoute allowedRoles={['OFFICER', 'ADMIN']} />}>
+          <Route path="/admin" element={<AdminLayout />}>
+            <Route index element={<AdminDashboardPage />} />
+            <Route path="applications" element={<ApplicationQueuePage />} />
+            <Route path="verification" element={<DocVerificationPage />} />
+            <Route path="deficiencies" element={<DocVerificationPage />} />
+            <Route path="selection" element={<SelectionBoardPage />} />
+            <Route path="scheme-configurator" element={<SchemeConfiguratorPage />} />
+            <Route path="audit-logs" element={<AuditLogsPage />} />
+            <Route path="grievances" element={<GrievanceQueuePage />} />
+          </Route>
+          <Route path="/officer" element={<Navigate to="/admin" replace />} />
+        </Route>
       </Route>
 
       {/* Fallback */}

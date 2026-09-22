@@ -4,7 +4,7 @@ from fastapi import FastAPI, status, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.database.mongodb import db_manager, get_database
-from app.services.application_service import seed_schemes_if_empty
+from app.services.application_service import seed_schemes_if_empty, seed_users_if_empty
 
 # Routers
 from app.routes.auth import router as auth_router
@@ -12,6 +12,8 @@ from app.routes.schemes import router as schemes_router
 from app.routes.applications import router as applications_router
 from app.routes.documents import router as documents_router
 from app.routes.grievances import router as grievances_router
+from app.routes.admin import router as admin_router
+from app.routes.eligibility import router as eligibility_router
 
 # Logging setup
 logging.basicConfig(
@@ -30,11 +32,13 @@ async def lifespan(app: FastAPI):
         is_connected = await db_manager.init_connection()
         if is_connected and db_manager.db is not None:
             await seed_schemes_if_empty(db_manager.db)
-            logger.info("MongoDB initialized and scheme seed data ensured.")
+            await seed_users_if_empty(db_manager.db)
+            logger.info("MongoDB initialized, scheme and role seed data ensured.")
         else:
             logger.warning("MongoDB ping failed. Running with database disconnected status.")
     except Exception as e:
         logger.error("Startup database connection warning: %s", str(e))
+
 
     yield
 
@@ -101,3 +105,5 @@ app.include_router(schemes_router, prefix=settings.API_V1_STR)
 app.include_router(applications_router, prefix=settings.API_V1_STR)
 app.include_router(documents_router, prefix=settings.API_V1_STR)
 app.include_router(grievances_router, prefix=settings.API_V1_STR)
+app.include_router(admin_router, prefix=settings.API_V1_STR)
+app.include_router(eligibility_router, prefix=settings.API_V1_STR)

@@ -171,6 +171,46 @@ class ApiClient {
   public async getMyGrievances() {
     return this.request<any[]>('/grievances/my');
   }
+
+  // Admin & Officer APIs
+  public async getAdminDashboardStats() {
+    return this.request<any>('/admin/dashboard/stats');
+  }
+
+  public async getSchemeStatistics() {
+    return this.request<any[]>('/admin/dashboard/scheme-statistics');
+  }
+
+  public async getAllApplications(statusFilter?: string, schemeFilter?: string) {
+    const params = new URLSearchParams();
+    if (statusFilter) params.append('status_filter', statusFilter);
+    if (schemeFilter) params.append('scheme_filter', schemeFilter);
+    const query = params.toString() ? `?${params.toString()}` : '';
+    return this.request<any[]>(`/admin/applications${query}`);
+  }
+
+  public async updateApplicationStatusOfficer(applicationId: string, payload: { status: string; remarks?: string; officer_name?: string }) {
+    return this.request<any>(`/admin/applications/${applicationId}/status`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  public async getAllGrievances() {
+    return this.request<any[]>('/admin/grievances');
+  }
+
+  public async resolveGrievanceOfficer(grievanceId: string, update: { status?: string; resolution_remarks?: string; assigned_officer?: string }) {
+    return this.request<any>(`/admin/grievances/${grievanceId}`, {
+      method: 'PUT',
+      body: JSON.stringify(update),
+    });
+  }
+
+  public async getSystemAuditLogs(limit: number = 50) {
+    return this.request<any[]>(`/admin/audit-logs?limit=${limit}`);
+  }
 }
 
 export const api = new ApiClient();
+

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import { Search, Eye, User, LogIn, ShieldAlert } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
+import { Search, Eye, User, LogIn, UserPlus, LogOut, LayoutDashboard } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 
 export const GovHeader: React.FC = () => {
@@ -10,11 +11,10 @@ export const GovHeader: React.FC = () => {
     increaseFontSize,
     decreaseFontSize,
     resetFontSize,
-    toggleHighContrast,
-    currentUser,
-    switchRole
+    toggleHighContrast
   } = useApp();
 
+  const { isAuthenticated, user, logout } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const navigate = useNavigate();
 
@@ -23,6 +23,11 @@ export const GovHeader: React.FC = () => {
     if (searchQuery.trim()) {
       navigate(`/schemes?q=${encodeURIComponent(searchQuery.trim())}`);
     }
+  };
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
   };
 
   return (
@@ -136,9 +141,8 @@ export const GovHeader: React.FC = () => {
             <div className="flex-shrink-0 flex items-center justify-center">
               <img
                 src="/images/mota-emblem.png"
-                alt="Ministry of Tribal Affairs Emblem"
+                alt="Government of India emblem"
                 className="h-10 sm:h-12 md:h-14 w-auto max-w-[120px] sm:max-w-[160px] md:max-w-[200px] object-contain flex-shrink-0"
-                style={{ objectFit: 'contain' }}
               />
             </div>
 
@@ -158,13 +162,13 @@ export const GovHeader: React.FC = () => {
             </div>
           </Link>
 
-          {/* Right: Search, Digital India badge, and Login */}
+          {/* Right: Search and Dynamic Auth State */}
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
             {/* Global Search Bar */}
-            <form onSubmit={handleSearch} className="relative min-w-[240px] sm:min-w-[280px]">
+            <form onSubmit={handleSearch} className="relative min-w-[220px] sm:min-w-[260px]">
               <input
                 type="text"
-                placeholder={language === 'HI' ? 'योजनाएं, दिशानिर्देश, परिणाम खोजें...' : 'Search schemes, guidelines, FAQs...'}
+                placeholder={language === 'HI' ? 'योजनाएं, दिशानिर्देश खोजें...' : 'Search schemes, guidelines...'}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full pl-9 pr-4 py-1.5 text-xs sm:text-sm bg-slate-50 border border-slate-300 rounded focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-800 text-slate-900 placeholder:text-slate-400"
@@ -173,41 +177,55 @@ export const GovHeader: React.FC = () => {
               <button type="submit" className="sr-only">Search</button>
             </form>
 
-            {/* Digital India and Azadi Amrit Mahotsav badges */}
-            <div className="hidden lg:flex items-center gap-2 border-l border-slate-200 pl-3">
-              <div className="text-center px-2 py-1 bg-slate-50 rounded border border-slate-200">
-                <span className="block text-[9px] font-bold text-orange-600 uppercase tracking-wider">Digital India</span>
-                <span className="block text-[8px] text-slate-500 font-medium">Power To Empower</span>
-              </div>
-            </div>
-
-            {/* Authentication / Citizen Portal button */}
+            {/* Dynamic Authentication Actions */}
             <div className="flex items-center gap-2">
-              {currentUser.role === 'APPLICANT' ? (
-                <Link
-                  to="/applicant/dashboard"
-                  className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded bg-blue-900 hover:bg-blue-800 text-white text-xs font-semibold shadow-sm transition-colors"
-                >
-                  <User className="w-3.5 h-3.5" />
-                  <span>My Application</span>
-                </Link>
+              {!isAuthenticated ? (
+                <>
+                  <Link
+                    to="/login"
+                    className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded bg-[#0b2853] hover:bg-[#134685] text-white text-xs font-bold shadow-sm transition-colors"
+                  >
+                    <LogIn className="w-3.5 h-3.5" />
+                    <span>Login</span>
+                  </Link>
+                  <Link
+                    to="/signup"
+                    className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold shadow-sm transition-colors"
+                  >
+                    <UserPlus className="w-3.5 h-3.5 text-slate-500" />
+                    <span>Sign Up</span>
+                  </Link>
+                </>
               ) : (
-                <Link
-                  to="/admin"
-                  className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded bg-indigo-900 hover:bg-indigo-800 text-white text-xs font-semibold shadow-sm transition-colors"
-                >
-                  <ShieldAlert className="w-3.5 h-3.5" />
-                  <span>Officer Portal</span>
-                </Link>
-              )}
+                <div className="flex items-center gap-2">
+                  <div className="text-right hidden sm:block">
+                    <span className="text-xs font-bold text-slate-900 block leading-tight">
+                      {user?.name}
+                    </span>
+                    <span className="text-[10px] text-slate-500 uppercase font-semibold">
+                      {user?.role}
+                    </span>
+                  </div>
 
-              <Link
-                to="/applicant/login"
-                className="inline-flex items-center justify-center gap-1 px-2.5 py-1.5 rounded border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-medium transition-colors"
-              >
-                <LogIn className="w-3.5 h-3.5 text-slate-500" />
-                <span>Login</span>
-              </Link>
+                  <Link
+                    to={user?.role === 'APPLICANT' ? '/applicant/dashboard' : '/admin'}
+                    className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded bg-[#0b2853] hover:bg-[#134685] text-white text-xs font-bold shadow-sm transition-colors"
+                  >
+                    <LayoutDashboard className="w-3.5 h-3.5 text-amber-300" />
+                    <span>Dashboard</span>
+                  </Link>
+
+                  <button
+                    onClick={handleLogout}
+                    className="inline-flex items-center justify-center gap-1 px-2.5 py-1.5 rounded border border-slate-300 bg-white hover:bg-rose-50 hover:border-rose-300 text-rose-700 text-xs font-semibold shadow-sm transition-colors"
+                    title="Logout from system"
+                    aria-label="Logout"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Logout</span>
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>

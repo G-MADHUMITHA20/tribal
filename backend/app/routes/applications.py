@@ -3,7 +3,7 @@ from typing import List, Optional
 from fastapi import APIRouter, HTTPException, status, Depends
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from app.database.mongodb import get_database
-from app.core.security import get_current_user_payload
+from app.core.security import get_current_user, require_applicant
 from app.schemas.application import (
     ApplicationCreate,
     ApplicationUpdate,
@@ -17,14 +17,15 @@ router = APIRouter(prefix="/applications", tags=["Applications"])
 @router.post("", response_model=ApplicationResponse, status_code=status.HTTP_201_CREATED)
 async def create_application(
     app_in: ApplicationCreate,
-    payload: dict = Depends(get_current_user_payload),
+    current_user: dict = Depends(require_applicant),
     db: AsyncIOMotorDatabase = Depends(get_database)
 ):
     """
     Submit a new scholarship/fellowship application.
-    Automatically assigns a unique government tracking ID.
+    Enforces server-side ownership: user_id is taken strictly from current_user['_id'].
+    Frontend user_id parameters are never trusted or accepted.
     """
-    user_id = payload.get("sub")
+    user_id = current_user["_id"]
     now = datetime.now(timezone.utc)
 
     # Lookup scheme code for authentic ID generation
@@ -58,13 +59,14 @@ async def create_application(
 
 @router.get("/my", response_model=List[ApplicationResponse])
 async def get_my_applications(
-    payload: dict = Depends(get_current_user_payload),
+    current_user: dict = Depends(get_current_user),
     db: AsyncIOMotorDatabase = Depends(get_database)
 ):
     """
-    Retrieve all applications submitted by the currently authenticated citizen.
+    Retrieve all applications submitted strictly by the currently authenticated citizen.
+    Query is scoped to current_user['_id'].
     """
-    user_id = payload.get("sub")
+    user_id = current_user["_id"]
     cursor = db["applications"].find({"user_id": user_id}).sort("created_at", -1)
     results = await cursor.to_list(length=100)
 
@@ -73,15 +75,16 @@ async def get_my_applications(
 @router.get("/{application_id:path}", response_model=ApplicationResponse)
 async def get_application_by_id(
     application_id: str,
-    payload: dict = Depends(get_current_user_payload),
+    current_user: dict = Depends(get_current_user),
     db: AsyncIOMotorDatabase = Depends(get_database)
 ):
     """
     Retrieve specific application dossier by application ID.
-    Enforces authorization check for citizen or officer.
+    Enforces authorization check: Applicants can ONLY access their own application.
+    Officers and Admins may access applications for review.
     """
-    user_id = payload.get("sub")
-    user_role = payload.get("role")
+    user_id = current_user["_id"]
+    user_role = current_user.get("role")
 
     app_doc = await db["applications"].find_one({"_id": application_id})
     if not app_doc:
@@ -90,7 +93,7 @@ async def get_application_by_id(
             detail=f"Application '{application_id}' does not exist."
         )
 
-    # Citizen can only view their own applications; Officers can view any
+    # Citizen can only view their own applications; Officers and Admins can view for review
     if user_role == "APPLICANT" and app_doc.get("user_id") != user_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -103,14 +106,15 @@ async def get_application_by_id(
 async def update_application(
     application_id: str,
     app_update: ApplicationUpdate,
-    payload: dict = Depends(get_current_user_payload),
+    current_user: dict = Depends(get_current_user),
     db: AsyncIOMotorDatabase = Depends(get_database)
 ):
     """
     Update application details, replace documents, or rectify deficiencies.
+    Applicants can ONLY modify their own applications.
     """
-    user_id = payload.get("sub")
-    user_role = payload.get("role")
+    user_id = current_user["_id"]
+    user_role = current_user.get("role")
 
     existing_app = await db["applications"].find_one({"_id": application_id})
     if not existing_app:
@@ -145,3 +149,4 @@ async def update_application(
     updated_doc = await db["applications"].find_one({"_id": application_id})
 
     return ApplicationResponse(**updated_doc)
+

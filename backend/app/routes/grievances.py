@@ -4,7 +4,7 @@ from typing import List
 from fastapi import APIRouter, HTTPException, status, Depends
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from app.database.mongodb import get_database
-from app.core.security import get_current_user_payload
+from app.core.security import get_current_user
 from app.schemas.grievance import GrievanceCreate, GrievanceResponse, GrievanceStatus
 
 router = APIRouter(prefix="/grievances", tags=["Grievances"])
@@ -12,13 +12,25 @@ router = APIRouter(prefix="/grievances", tags=["Grievances"])
 @router.post("", response_model=GrievanceResponse, status_code=status.HTTP_201_CREATED)
 async def lodge_grievance(
     g_in: GrievanceCreate,
-    payload: dict = Depends(get_current_user_payload),
+    current_user: dict = Depends(get_current_user),
     db: AsyncIOMotorDatabase = Depends(get_database)
 ):
     """
     Lodge an official grievance or dispute ticket with the Ministry.
+    Enforces that the user_id comes strictly from the server-validated session.
     """
-    user_id = payload.get("sub")
+    user_id = current_user["_id"]
+    user_role = current_user.get("role")
+
+    # If associated with an application, verify applicant owns it
+    if g_in.application_id:
+        app = await db["applications"].find_one({"_id": g_in.application_id})
+        if app and user_role == "APPLICANT" and app.get("user_id") != user_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Unauthorized: You cannot lodge a grievance against another applicant's application."
+            )
+
     now = datetime.now(timezone.utc)
     year = now.year
     seq = uuid.uuid4().hex[:6].upper()
@@ -46,14 +58,16 @@ async def lodge_grievance(
 
 @router.get("/my", response_model=List[GrievanceResponse])
 async def get_my_grievances(
-    payload: dict = Depends(get_current_user_payload),
+    current_user: dict = Depends(get_current_user),
     db: AsyncIOMotorDatabase = Depends(get_database)
 ):
     """
     Retrieve all grievances lodged by the current authenticated citizen.
+    Query is strictly scoped to current_user['_id'].
     """
-    user_id = payload.get("sub")
+    user_id = current_user["_id"]
     cursor = db["grievances"].find({"user_id": user_id}).sort("created_at", -1)
     items = await cursor.to_list(length=100)
 
     return [GrievanceResponse(**i) for i in items]
+
