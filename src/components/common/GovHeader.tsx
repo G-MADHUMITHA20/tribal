@@ -131,35 +131,30 @@ export const GovHeader: React.FC = () => {
       <div className="max-w-7xl mx-auto px-4 py-3 sm:py-4">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           {/* Left: National Emblem & Ministry Identity */}
-          <Link to="/" className="flex items-center gap-3.5 group">
-            {/* National Emblem SVG representation */}
-            <div className="flex-shrink-0 flex items-center justify-center w-14 h-16 bg-slate-50 border border-slate-200 rounded p-1 shadow-sm">
-              <svg viewBox="0 0 100 120" className="w-12 h-14 text-slate-800" fill="currentColor">
-                {/* Ashoka Pillar stylized silhouette */}
-                <circle cx="50" cy="20" r="10" fill="#0b2853" />
-                <path d="M35,32 Q50,26 65,32 L60,65 Q50,68 40,65 Z" fill="#0b2853" />
-                <rect x="42" y="66" width="16" height="18" fill="#134685" />
-                <circle cx="50" cy="94" r="10" fill="#0b2853" stroke="#b45309" strokeWidth="2" />
-                {/* Ashoka Chakra spokes placeholder */}
-                <circle cx="50" cy="94" r="3" fill="#b45309" />
-                <path d="M28,108 L72,108 L76,116 L24,116 Z" fill="#0b2853" />
-                <text x="50" y="114" fontSize="6" textAnchor="middle" fill="#ffffff" fontWeight="bold">सत्यमेव जयते</text>
-              </svg>
+          <Link to="/" className="flex items-center gap-3 sm:gap-4 group">
+            {/* MoTA Emblem / Logo */}
+            <div className="flex-shrink-0 flex items-center justify-center">
+              <img
+                src="/images/mota-emblem.png"
+                alt="Ministry of Tribal Affairs Emblem"
+                className="h-10 sm:h-12 md:h-14 w-auto max-w-[120px] sm:max-w-[160px] md:max-w-[200px] object-contain flex-shrink-0"
+                style={{ objectFit: 'contain' }}
+              />
             </div>
 
             {/* Ministry Text */}
-            <div className="border-l border-slate-300 pl-3.5">
-              <h2 className="text-xs sm:text-sm font-semibold tracking-tight text-slate-600 leading-tight uppercase font-sans">
-                {language === 'HI' ? 'जनजातीय कार्य मंत्रालय' : 'Ministry of Tribal Affairs'}
+            <div className="border-l border-slate-300 pl-3 sm:pl-3.5">
+              <h2 className="text-xs sm:text-sm font-bold tracking-tight text-slate-800 leading-tight uppercase font-sans">
+                {language === 'HI' ? 'जनजातीय कार्य मंत्रालय' : 'MINISTRY OF TRIBAL AFFAIRS'}
               </h2>
-              <h1 className="text-base sm:text-xl font-bold text-[#0b2853] tracking-tight leading-snug">
+              <p className="text-[11px] sm:text-xs font-semibold text-slate-600 leading-tight">
+                {language === 'HI' ? 'भारत सरकार' : 'Government of India'}
+              </p>
+              <h1 className="text-sm sm:text-lg font-bold text-[#0b2853] tracking-tight leading-snug mt-0.5 sm:mt-1">
                 {language === 'HI'
                   ? 'एकीकृत एआई-सक्षम छात्रवृत्ति एवं अध्येतावृत्ति पोर्टल'
                   : 'Unified AI-Enabled Scholarship & Fellowship Portal'}
               </h1>
-              <p className="text-[11px] sm:text-xs text-slate-500 font-medium">
-                Government of India | भारत सरकार
-              </p>
             </div>
           </Link>
 
