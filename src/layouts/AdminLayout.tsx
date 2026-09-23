@@ -1,7 +1,7 @@
 import React from 'react';
 import { Outlet, NavLink, Link, useLocation } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
-import { RoleSwitcherBanner } from '../components/common/RoleSwitcherBanner';
+
 import {
   LayoutDashboard,
   FileCheck2,
@@ -36,11 +36,9 @@ export const AdminLayout: React.FC = () => {
 
   return (
     <div className="flex flex-col min-h-screen bg-[#f1f5f9]">
-      {/* Demo Switcher */}
-      <RoleSwitcherBanner />
 
       {/* Officer Top Bar */}
-      <header className="bg-[#0b2853] text-white border-b-2 border-amber-500 sticky top-7 z-40 shadow">
+      <header className="bg-[#0b2853] text-white border-b-2 border-amber-500 sticky top-0 z-40 shadow">
         <div className="px-4 py-2.5 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Link to="/" className="hover:opacity-90 flex items-center gap-2 text-slate-200 hover:text-white">

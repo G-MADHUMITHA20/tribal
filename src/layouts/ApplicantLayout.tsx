@@ -1,7 +1,7 @@
 import React from 'react';
 import { Outlet, NavLink, Link, useLocation } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
-import { RoleSwitcherBanner } from '../components/common/RoleSwitcherBanner';
+
 import { GovHeader } from '../components/common/GovHeader';
 import { GovFooter } from '../components/common/GovFooter';
 import {
@@ -32,8 +32,6 @@ export const ApplicantLayout: React.FC = () => {
 
   return (
     <div className="flex flex-col min-h-screen bg-[#f1f5f9]">
-      {/* Demo Switcher */}
-      <RoleSwitcherBanner />
 
       {/* Main Gov Header */}
       <GovHeader />
@@ -87,7 +85,7 @@ export const ApplicantLayout: React.FC = () => {
       </div>
 
       {/* Secondary Citizen Portal Navigation */}
-      <div className="bg-white border-b border-slate-200 shadow-sm sticky top-7 z-30">
+      <div className="bg-white border-b border-slate-200 shadow-sm sticky top-0 z-30">
         <div className="max-w-7xl mx-auto px-4 flex items-center gap-1 overflow-x-auto py-1">
           {navItems.map((item) => (
             <NavLink

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Outlet } from 'react-router-dom';
-import { RoleSwitcherBanner } from '../components/common/RoleSwitcherBanner';
+
 import { GovHeader } from '../components/common/GovHeader';
 import { GovNavigation } from '../components/common/GovNavigation';
 import { NewsTicker } from '../components/common/NewsTicker';
@@ -9,8 +9,6 @@ import { GovFooter } from '../components/common/GovFooter';
 export const PublicLayout: React.FC = () => {
   return (
     <div className="flex flex-col min-h-screen bg-[#f8fafc]">
-      {/* Demo Switcher */}
-      <RoleSwitcherBanner />
 
       {/* Main Government Header */}
       <GovHeader />
