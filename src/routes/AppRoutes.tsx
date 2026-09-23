@@ -86,7 +86,6 @@ export const AppRoutes: React.FC = () => {
             <Route index element={<AdminDashboardPage />} />
             <Route path="applications" element={<ApplicationQueuePage />} />
             <Route path="verification" element={<DocVerificationPage />} />
-            <Route path="deficiencies" element={<DocVerificationPage />} />
             <Route path="selection" element={<SelectionBoardPage />} />
             <Route path="scheme-configurator" element={<SchemeConfiguratorPage />} />
             <Route path="audit-logs" element={<AuditLogsPage />} />

@@ -28,7 +28,6 @@ export const AdminLayout: React.FC = () => {
     { to: '/admin', label: 'Overview Dashboard', icon: <LayoutDashboard className="w-4 h-4" /> },
     { to: '/admin/applications', label: 'Applications & Scrutiny', icon: <FileCheck2 className="w-4 h-4" /> },
     { to: '/admin/verification', label: 'Document Intelligence (OCR)', icon: <Cpu className="w-4 h-4" /> },
-    { to: '/admin/deficiencies', label: 'Deficiency Management', icon: <AlertTriangle className="w-4 h-4 text-rose-400" /> },
     { to: '/admin/selection', label: 'Merit & Selection Board', icon: <Award className="w-4 h-4" /> },
     { to: '/admin/scheme-configurator', label: 'Scheme Configurator', icon: <Sliders className="w-4 h-4 text-amber-400" /> },
     { to: '/admin/grievances', label: 'Grievance Desk', icon: <HelpCircle className="w-4 h-4" /> },
