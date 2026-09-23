@@ -6,6 +6,8 @@ import { SchemeConfig } from '../../types/scheme';
 import { ApplicationRecord } from '../../types/application';
 import { DocumentOcrViewer } from '../../components/document-ai/DocumentOcrViewer';
 import { ExplainableEvidenceCard } from '../../components/document-ai/ExplainableEvidenceCard';
+import { simulateDocumentOcr } from '../../services/documentAiMock';
+import { evaluateApplicantEligibility } from '../../services/eligibilityEngine';
 import { DigiLockerService, PfmsDbtService, ESignService } from '../../services/integrations';
 import {
   User,
@@ -21,7 +23,8 @@ import {
   Save,
   AlertTriangle,
   Upload,
-  ExternalLink
+  ExternalLink,
+  XCircle
 } from 'lucide-react';
 import { api } from '../../services/api';
 
@@ -131,6 +134,36 @@ export const ApplicationWizardPage: React.FC = () => {
       setAdmissionFileObj(file);
     }
   };
+
+  // ===============================
+  // REAL-TIME VERIFICATION GATES
+  // ===============================
+  
+  const applicantDataPayload = {
+    category,
+    annualFamilyIncome: Number(annualFamilyIncome) || 0,
+    previousExamPercentage: Number(previousExamPercentage) || 0,
+    applicantAge: Number(applicantAge) || 0,
+    isAadhaarSeeded
+  };
+
+  const eligibilityResult = React.useMemo(() => {
+    return evaluateApplicantEligibility(selectedScheme, applicantDataPayload as any);
+  }, [selectedScheme, applicantDataPayload.category, applicantDataPayload.annualFamilyIncome, applicantDataPayload.previousExamPercentage, applicantDataPayload.applicantAge, applicantDataPayload.isAadhaarSeeded]);
+
+  const ocrResults = React.useMemo(() => {
+    const results = [];
+    if (stCertFile) results.push(simulateDocumentOcr('ST_CERTIFICATE', fullName || 'Not provided', Number(annualFamilyIncome) || 0, false));
+    if (incCertFile) results.push(simulateDocumentOcr('INCOME_CERTIFICATE', fullName || 'Not provided', Number(annualFamilyIncome) || 0, false));
+    if (marksheetFile) results.push(simulateDocumentOcr('MARKSHEET', fullName || 'Not provided', Number(annualFamilyIncome) || 0, false));
+    return results;
+  }, [stCertFile, incCertFile, marksheetFile, fullName, annualFamilyIncome]);
+
+  const requiredDocumentsUploaded = Boolean(stCertFile && incCertFile && marksheetFile && admissionFile);
+  const allOcrPassed = ocrResults.every(r => r.overallDocStatus === 'VERIFIED');
+  const isEligible = eligibilityResult.overallStatus === 'ELIGIBLE';
+  
+  const canSubmit = requiredDocumentsUploaded && allOcrPassed && isEligible;
 
   // Load existing profile and reusable documents on mount
   useEffect(() => {
@@ -297,8 +330,26 @@ export const ApplicationWizardPage: React.FC = () => {
 
   const handleFinalSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    const existingAppForScheme = applications.find(
+      (a) =>
+        a.schemeId === selectedScheme.id &&
+        (a.applicant.id === currentUser?.id ||
+          (currentUser?.email && a.applicant.email?.toLowerCase() === currentUser.email.toLowerCase()))
+    );
+
+    if (existingAppForScheme && !['DRAFT', 'DEFICIENCY_NOTIFIED'].includes(existingAppForScheme.status)) {
+      alert('Your application is already submitted and locked.');
+      return;
+    }
+
     if (!eSignConsent) {
       alert('Please accept the statutory Aadhaar e-Sign declaration to complete submission.');
+      return;
+    }
+
+    if (!canSubmit) {
+      alert('Application cannot be submitted. All mandatory verification checks and eligibility criteria must pass first.');
       return;
     }
 
@@ -366,7 +417,7 @@ export const ApplicationWizardPage: React.FC = () => {
 
     await ESignService.signApplicationDeclaration('NEW', fullName.trim());
 
-    const generatedId = `MOTA/${new Date().getFullYear()}-${String(new Date().getFullYear() + 1).slice(-2)}/${selectedScheme.code.split('-')[1]}/${Math.floor(10000 + Math.random() * 90000)}`;
+    const generatedId = existingAppForScheme ? existingAppForScheme.id : `MOTA/${new Date().getFullYear()}-${String(new Date().getFullYear() + 1).slice(-2)}/${selectedScheme.code.split('-')[1]}/${Math.floor(10000 + Math.random() * 90000)}`;
     setNewGeneratedAppId(generatedId);
 
     const newAppRecord: ApplicationRecord = {
@@ -376,8 +427,8 @@ export const ApplicationWizardPage: React.FC = () => {
       schemeName: selectedScheme.name,
       submissionDate: new Date().toISOString().substring(0, 10),
       lastUpdated: new Date().toISOString().substring(0, 10),
-      currentStageIndex: 1,
-      status: 'SUBMITTED',
+      currentStageIndex: 2,
+      status: existingAppForScheme && existingAppForScheme.status === 'DEFICIENCY_NOTIFIED' ? 'RESUBMITTED' : 'DOC_VERIFICATION_PENDING',
       applicant: {
         id: currentUser?.id || 'APP-ST-' + Math.floor(1000 + Math.random() * 9000),
         fullName: fullName.trim(),
@@ -464,26 +515,16 @@ export const ApplicationWizardPage: React.FC = () => {
       ],
       hasDeficiency: false,
       aiEligibilityResult: {
-        overallStatus: 'ELIGIBLE',
-        confidenceScore: 0.98,
-        ruleMatches: [
-          {
-            ruleId: 'RULE_ST_CHECK',
-            label: 'ST Community Validation',
-            expected: 'ST',
-            actual: `ST (${tribeCommunity || 'Scheduled Tribe'})`,
-            status: 'PASS',
-            evidenceSnippet: 'Community matched against Presidential Order.'
-          },
-          {
-            ruleId: 'RULE_INC_CHECK',
-            label: 'Family Income Check',
-            expected: selectedScheme.annualIncomeCap === 0 ? 'No Limit' : `<= ₹${selectedScheme.annualIncomeCap}`,
-            actual: `₹${(Number(annualFamilyIncome) || 0).toLocaleString('en-IN')}`,
-            status: 'PASS',
-            evidenceSnippet: 'Within configured ceiling.'
-          }
-        ]
+        overallStatus: eligibilityResult.overallStatus,
+        confidenceScore: eligibilityResult.confidenceScore,
+        ruleMatches: eligibilityResult.criteriaResults.map(cr => ({
+          ruleId: cr.criterion.id,
+          label: cr.criterion.label,
+          expected: cr.criterion.value.toString(),
+          actual: cr.userValue ? cr.userValue.toString() : 'Not provided',
+          status: cr.passed ? 'PASS' : 'FAIL',
+          evidenceSnippet: cr.reason
+        }))
       },
       auditTrail: [
         {
@@ -491,16 +532,74 @@ export const ApplicationWizardPage: React.FC = () => {
           timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
           actor: fullName || 'Citizen Applicant',
           actorRole: 'APPLICANT',
-          action: 'Online Application Submitted with e-Sign',
-          previousStatus: 'DRAFT',
-          newStatus: 'SUBMITTED',
+          action: existingAppForScheme && existingAppForScheme.status === 'DEFICIENCY_NOTIFIED' ? 'Application Resubmitted after Deficiency Correction' : 'Online Application Submitted with e-Sign',
+          previousStatus: existingAppForScheme ? existingAppForScheme.status : 'DRAFT',
+          newStatus: existingAppForScheme && existingAppForScheme.status === 'DEFICIENCY_NOTIFIED' ? 'RESUBMITTED' : 'SUBMITTED',
           remarks: 'Form submitted successfully via Unified MoTA Portal.'
         }
       ]
     };
 
-    const persistedApp = await addApplication(newAppRecord);
-    const targetAppId = persistedApp?.id || generatedId;
+    let targetAppId = generatedId;
+    if (existingAppForScheme && existingAppForScheme.status === 'DEFICIENCY_NOTIFIED') {
+      try {
+        const updatePayload = {
+          scheme_id: newAppRecord.schemeCode || newAppRecord.schemeId,
+          personal_details: {
+            full_name: newAppRecord.applicant.fullName,
+            father_or_husband_name: newAppRecord.applicant.fatherOrHusbandName,
+            gender: newAppRecord.applicant.gender,
+            dob: newAppRecord.applicant.dob,
+            aadhaar_masked: newAppRecord.applicant.aadhaarNumberMasked,
+            category: newAppRecord.applicant.category,
+            tribe_community: newAppRecord.applicant.tribeCommunity,
+            mobile: newAppRecord.applicant.mobile,
+            email: newAppRecord.applicant.email,
+            state: newAppRecord.applicant.state,
+            district: newAppRecord.applicant.district,
+            pincode: newAppRecord.applicant.pincode,
+          },
+          academic_details: {
+            current_course: newAppRecord.academic.currentCourse,
+            institution_name: newAppRecord.academic.institutionName,
+            institution_state: newAppRecord.academic.institutionState,
+            aishe_code: newAppRecord.academic.aisheCode,
+            roll_number: newAppRecord.academic.rollNumber,
+            year_of_study: newAppRecord.academic.yearOfStudy,
+            previous_exam_name: newAppRecord.academic.previousExamName,
+            previous_exam_percentage: newAppRecord.academic.previousExamPercentage,
+            passing_year: newAppRecord.academic.passingYear,
+            board_or_university: newAppRecord.academic.boardOrUniversity,
+          },
+          financial_details: {
+            annual_family_income: newAppRecord.annualFamilyIncome,
+            bank_name: newAppRecord.bank.bankName,
+            account_holder_name: newAppRecord.bank.accountHolderName,
+            account_number_masked: newAppRecord.bank.accountNumberMasked,
+            ifsc_code: newAppRecord.bank.ifscCode,
+            branch_name: newAppRecord.bank.branchName,
+            is_aadhaar_seeded: newAppRecord.bank.isAadhaarSeeded,
+          },
+          documents: (newAppRecord.documents || []).map((d) => ({
+            id: d.id,
+            document_code: d.documentCode,
+            document_name: d.documentName,
+            file_name: d.fileName,
+            file_url: d.fileUrl,
+            file_size_kb: d.fileSizeKB,
+            status: d.status,
+          })),
+          status: 'RESUBMITTED',
+        };
+        await api.updateApplication(existingAppForScheme.id, updatePayload);
+      } catch (err: any) {
+        console.warn('Failed to update application on server:', err);
+      }
+    } else {
+      const persistedApp = await addApplication(newAppRecord);
+      targetAppId = persistedApp?.id || generatedId;
+    }
+
     setNewGeneratedAppId(targetAppId);
 
     // Upload real files to MongoDB Atlas & Storage (or reuse existing)
@@ -526,6 +625,51 @@ export const ApplicationWizardPage: React.FC = () => {
     setIsSavedDraft(true);
     setTimeout(() => setIsSavedDraft(false), 2500);
   };
+
+  const existingAppForSchemeLockCheck = applications.find(
+    (a) =>
+      a.schemeId === selectedScheme.id &&
+      (a.applicant.id === currentUser?.id ||
+        (currentUser?.email && a.applicant.email?.toLowerCase() === currentUser.email.toLowerCase()))
+  );
+
+  const isLocked = existingAppForSchemeLockCheck && !['DRAFT', 'DEFICIENCY_NOTIFIED'].includes(existingAppForSchemeLockCheck.status);
+
+  if (isLocked && !isSubmittedSuccess) {
+    return (
+      <div className="bg-white p-8 rounded border border-slate-300 shadow-md text-center max-w-2xl mx-auto space-y-4 my-8">
+        <div className="w-16 h-16 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center mx-auto">
+          <Eye className="w-10 h-10" />
+        </div>
+        <span className="text-xs font-bold uppercase tracking-widest text-blue-800 block">
+          Application Submitted
+        </span>
+        <h2 className="text-2xl font-black text-[#0b2853]">
+          Application Locked
+        </h2>
+        <div className="bg-slate-50 border border-slate-200 p-4 rounded text-xs space-y-1">
+          <div className="text-slate-500">Your Application Reference ID:</div>
+          <div className="text-xl font-mono font-black text-blue-900 tracking-wider">
+            {existingAppForSchemeLockCheck.id}
+          </div>
+          <div className="text-slate-600 font-medium">Scheme: {existingAppForSchemeLockCheck.schemeName}</div>
+          <div className="text-slate-600 font-medium">Status: {existingAppForSchemeLockCheck.status.replace(/_/g, ' ')}</div>
+          <div className="text-slate-600 font-medium">Submitted On: {existingAppForSchemeLockCheck.submissionDate}</div>
+        </div>
+        <p className="text-xs text-slate-600 leading-relaxed max-w-md mx-auto">
+          Your application has been submitted successfully and is now under review. You cannot edit your application at this stage. If any deficiencies are found, the Admin will notify you and unlock the application for correction.
+        </p>
+        <div className="flex flex-wrap items-center justify-center gap-3 pt-4">
+          <button
+            onClick={() => navigate('/applicant/dashboard')}
+            className="px-5 py-2.5 bg-[#0b2853] hover:bg-[#134685] text-white font-bold text-xs rounded shadow flex items-center gap-1.5"
+          >
+            <span>Back to Dashboard</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (isSubmittedSuccess) {
     return (
@@ -1365,39 +1509,34 @@ export const ApplicationWizardPage: React.FC = () => {
             />
 
             {/* Explainable Decision Card */}
-            <ExplainableEvidenceCard
-              decision="ELIGIBLE"
-              schemeName={selectedScheme.name}
-              evidenceList={[
-                {
-                  ruleLabel: 'ST Community Category Match',
-                  ruleFormula: 'category == ST',
-                  documentSource: 'ST Certificate → Tribe',
-                  extractedValue: tribeCommunity ? `Scheduled Tribe (${tribeCommunity})` : 'Scheduled Tribe',
-                  declaredValue: 'ST',
-                  status: 'SATISFIED',
-                  statutoryReference: 'The Constitution (Scheduled Tribes) Order, 1950'
-                },
-                {
-                  ruleLabel: 'Annual Family Income Compliance',
-                  ruleFormula: 'annualIncome <= schemeLimit',
-                  documentSource: 'Income Certificate → Annual Family Income',
-                  extractedValue: annualFamilyIncome ? `₹${Number(annualFamilyIncome).toLocaleString('en-IN')}` : 'Not specified',
-                  declaredValue: annualFamilyIncome ? `₹${Number(annualFamilyIncome).toLocaleString('en-IN')}` : 'Not specified',
-                  status: 'SATISFIED',
-                  statutoryReference: 'MoTA Operational Guidelines'
-                },
-                {
-                  ruleLabel: 'Qualifying Examination Standard',
-                  ruleFormula: 'percentage >= minCutoff',
-                  documentSource: 'Marksheet → Aggregate %',
-                  extractedValue: previousExamPercentage ? `${previousExamPercentage}%` : 'Not specified',
-                  declaredValue: previousExamPercentage ? `${previousExamPercentage}%` : 'Not specified',
-                  status: 'SATISFIED',
-                  statutoryReference: 'Academic Selection Regulations'
-                }
-              ]}
-            />
+            <div className="bg-slate-50 border border-slate-200 rounded p-4 mt-6">
+              <h3 className="font-bold text-slate-800 uppercase text-xs mb-3 flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-blue-700" />
+                Eligibility Engine Evaluation
+              </h3>
+              
+              <div className="space-y-2 mb-4">
+                {eligibilityResult.criteriaResults.map((cr, idx) => (
+                  <div key={idx} className="flex items-center justify-between text-xs bg-white p-2 rounded border border-slate-100 shadow-sm">
+                    <div className="flex items-center gap-2">
+                      {cr.passed ? <CheckCircle2 className="w-4 h-4 text-emerald-600" /> : <AlertTriangle className="w-4 h-4 text-rose-600" />}
+                      <span className="font-medium text-slate-700">{cr.criterion.label}</span>
+                    </div>
+                    <div className="text-right">
+                      <div className={cr.passed ? "text-emerald-700 font-bold" : "text-rose-700 font-bold"}>
+                        {cr.passed ? 'Passed' : 'Failed'}
+                      </div>
+                      <div className="text-[10px] text-slate-500">{cr.reason}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              
+              <div className={`p-3 rounded text-xs font-bold border ${isEligible ? 'bg-emerald-50 border-emerald-300 text-emerald-900' : 'bg-rose-50 border-rose-300 text-rose-900'}`}>
+                Overall Eligibility: {isEligible ? 'ELIGIBLE' : 'NOT ELIGIBLE'}
+                <div className="text-[11px] font-normal mt-0.5">{eligibilityResult.explanationSummary}</div>
+              </div>
+            </div>
           </div>
         )}
 
@@ -1494,6 +1633,48 @@ export const ApplicationWizardPage: React.FC = () => {
               </label>
             </div>
 
+            {/* Strict Verification Submission Gate UI */}
+            <div className={`p-4 rounded border ${canSubmit ? 'bg-emerald-50 border-emerald-300' : 'bg-rose-50 border-rose-300'}`}>
+              <h3 className={`font-bold text-sm mb-3 flex items-center gap-2 ${canSubmit ? 'text-emerald-900' : 'text-rose-900'}`}>
+                {canSubmit ? <CheckCircle2 className="w-5 h-5" /> : <AlertTriangle className="w-5 h-5" />}
+                Submission Verification Gate
+              </h3>
+              
+              <div className="space-y-2 text-xs">
+                <div className="flex items-center gap-2">
+                  {requiredDocumentsUploaded ? <CheckCircle2 className="w-4 h-4 text-emerald-600" /> : <XCircle className="w-4 h-4 text-rose-600" />}
+                  <span className={requiredDocumentsUploaded ? 'text-emerald-800' : 'text-rose-800'}>
+                    Required Documents Uploaded {requiredDocumentsUploaded ? '(Verified)' : '(Missing Documents)'}
+                  </span>
+                </div>
+                
+                <div className="flex items-center gap-2">
+                  {allOcrPassed ? <CheckCircle2 className="w-4 h-4 text-emerald-600" /> : <XCircle className="w-4 h-4 text-rose-600" />}
+                  <span className={allOcrPassed ? 'text-emerald-800' : 'text-rose-800'}>
+                    AI Document OCR Check {allOcrPassed ? '(Passed)' : '(Failed/Pending)'}
+                  </span>
+                </div>
+                
+                <div className="flex items-center gap-2">
+                  {isEligible ? <CheckCircle2 className="w-4 h-4 text-emerald-600" /> : <XCircle className="w-4 h-4 text-rose-600" />}
+                  <span className={isEligible ? 'text-emerald-800' : 'text-rose-800'}>
+                    Scheme Eligibility Rules {isEligible ? '(Passed)' : '(Failed)'}
+                  </span>
+                </div>
+              </div>
+              
+              {!canSubmit && (
+                <div className="mt-3 pt-3 border-t border-rose-200 text-rose-900 font-bold text-xs">
+                  🔒 Application cannot be submitted yet. Fix the failed checks above.
+                </div>
+              )}
+              {canSubmit && (
+                <div className="mt-3 pt-3 border-t border-emerald-200 text-emerald-900 font-bold text-xs">
+                  ✓ All mandatory checks passed. You may now submit your application.
+                </div>
+              )}
+            </div>
+
             <div className="bg-slate-100 p-3.5 rounded border border-slate-300 flex items-center justify-between text-[11px]">
               <div className="flex items-center gap-2">
                 <ShieldCheck className="w-5 h-5 text-blue-800" />
@@ -1532,7 +1713,7 @@ export const ApplicationWizardPage: React.FC = () => {
           ) : (
             <button
               type="button"
-              disabled={isSubmitting || !eSignConsent}
+              disabled={isSubmitting || !eSignConsent || !canSubmit}
               onClick={handleFinalSubmit}
               className="px-6 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded font-extrabold shadow-md flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed uppercase tracking-wider"
             >
