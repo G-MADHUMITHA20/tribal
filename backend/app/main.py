@@ -7,14 +7,14 @@ from app.database.mongodb import db_manager, get_database
 from app.services.application_service import seed_schemes_if_empty, seed_users_if_empty
 
 # Routers
-from app.routes.auth import router as auth_router
+from app.routes.auth import router as auth_router, ensure_user_indexes
 from app.routes.schemes import router as schemes_router
 from app.routes.applications import router as applications_router
 from app.routes.documents import router as documents_router
 from app.routes.grievances import router as grievances_router
 from app.routes.admin import router as admin_router
 from app.routes.eligibility import router as eligibility_router
-from app.routes.applicant_profile import router as applicant_profile_router
+from app.routes.applicant_profile import router as applicant_profile_router, ensure_profile_indexes
 
 # Logging setup
 logging.basicConfig(
@@ -34,7 +34,9 @@ async def lifespan(app: FastAPI):
         if is_connected and db_manager.db is not None:
             await seed_schemes_if_empty(db_manager.db)
             await seed_users_if_empty(db_manager.db)
-            logger.info("MongoDB initialized, scheme and role seed data ensured.")
+            await ensure_user_indexes(db_manager.db)
+            await ensure_profile_indexes(db_manager.db)
+            logger.info("MongoDB initialized, scheme and role seed data ensured, unique indexes created.")
         else:
             logger.warning("MongoDB ping failed. Running with database disconnected status.")
     except Exception as e:

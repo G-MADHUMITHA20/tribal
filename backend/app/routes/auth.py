@@ -1,25 +1,65 @@
 import uuid
+import logging
 from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, status, Depends
 from motor.motor_asyncio import AsyncIOMotorDatabase
+from pymongo.errors import DuplicateKeyError
 from app.database.mongodb import get_database
 from app.core.security import hash_password, verify_password, create_access_token, get_current_user_payload
 from app.schemas.user import UserRegister, UserLogin, UserResponse, TokenResponse, UserRole
+from app.services.identity_validator import validate_phone, normalize_phone
 
+logger = logging.getLogger("tsfms.auth")
 router = APIRouter(prefix="/auth", tags=["Authentication"])
+
+async def ensure_user_indexes(db: AsyncIOMotorDatabase):
+    """
+    Ensure database-level unique indexes on users collection for email and phone numbers.
+    Phone is mandatory in the User schema; enforces a standard unique index.
+    Upgrades any legacy sparse phone index to standard unique index automatically.
+    """
+    try:
+        # Enforce unique index on email
+        await db["users"].create_index("email", unique=True)
+
+        # Check existing indexes on users to cleanly upgrade legacy sparse phone index if present
+        existing_indexes = await db["users"].list_indexes().to_list(100)
+        for idx in existing_indexes:
+            if idx.get("name") == "phone_1" and idx.get("sparse") is True:
+                logger.info("Migrating legacy sparse phone index to standard unique index...")
+                await db["users"].drop_index("phone_1")
+                break
+
+        # Enforce unique index on phone
+        await db["users"].create_index("phone", unique=True)
+        logger.info("Database unique indexes verified on 'users' collection: email (unique), phone (unique).")
+    except Exception as e:
+        logger.error("Failed ensuring unique indexes on 'users' collection: %s", str(e))
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
 async def register(user_in: UserRegister, db: AsyncIOMotorDatabase = Depends(get_database)):
     """
     Register a new applicant citizen with hashed credentials.
+    Enforces strict email and phone normalization, application-level uniqueness,
+    and database-level duplicate-key race condition handling (HTTP 409).
     Never stores plain-text passwords.
     """
-    # Check if user already exists
-    existing_user = await db["users"].find_one({"email": user_in.email.lower()})
-    if existing_user:
+    clean_email = user_in.email.strip().lower()
+    clean_phone = validate_phone(user_in.phone)
+
+    # Application-level pre-checks for friendly, specific duplicate messaging
+    existing_email = await db["users"].find_one({"email": clean_email})
+    if existing_email:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="A citizen profile with this email address already exists in the system."
+            status_code=status.HTTP_409_CONFLICT,
+            detail="An account with this email already exists."
+        )
+
+    existing_phone = await db["users"].find_one({"phone": clean_phone})
+    if existing_phone:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="An account with this phone number already exists."
         )
 
     # Securely hash password using bcrypt
@@ -29,9 +69,9 @@ async def register(user_in: UserRegister, db: AsyncIOMotorDatabase = Depends(get
 
     user_doc = {
         "_id": user_id,
-        "name": user_in.name,
-        "email": user_in.email.lower(),
-        "phone": user_in.phone,
+        "name": user_in.name.strip(),
+        "email": clean_email,
+        "phone": clean_phone,
         "hashed_password": hashed_pwd,
         "role": user_in.role.value if user_in.role else UserRole.APPLICANT.value,
         "is_active": True,
@@ -39,7 +79,21 @@ async def register(user_in: UserRegister, db: AsyncIOMotorDatabase = Depends(get
         "updated_at": now
     }
 
-    await db["users"].insert_one(user_doc)
+    try:
+        await db["users"].insert_one(user_doc)
+    except DuplicateKeyError as dke:
+        # Robust inspection of keyPattern and string representation
+        key_pattern = getattr(dke, "details", {}).get("keyPattern", {}) if hasattr(dke, "details") and isinstance(dke.details, dict) else {}
+        err_msg = str(dke).lower()
+        if "phone" in key_pattern or "phone" in err_msg:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="An account with this phone number already exists."
+            )
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="An account with this email already exists."
+        )
 
     # Generate JWT access token
     access_token = create_access_token(data={
@@ -69,8 +123,10 @@ async def register(user_in: UserRegister, db: AsyncIOMotorDatabase = Depends(get
 async def login(credentials: UserLogin, db: AsyncIOMotorDatabase = Depends(get_database)):
     """
     Authenticate citizen credentials and issue JWT access token.
+    Uses identical email normalization (strip and lower).
     """
-    user = await db["users"].find_one({"email": credentials.email.lower()})
+    clean_email = credentials.email.strip().lower()
+    user = await db["users"].find_one({"email": clean_email})
     if not user or not verify_password(credentials.password, user.get("hashed_password", "")):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

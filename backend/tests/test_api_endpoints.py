@@ -48,7 +48,7 @@ def run_tests():
         token = reg_res["access_token"]
         print(f"Registered user: {reg_res['user']['name']} ({reg_res['user']['email']})")
     except urllib.error.HTTPError as e:
-        if e.code == 400:
+        if e.code in (400, 409):
             print("User already exists from previous run, proceeding to login...")
             login_payload = {
                 "email": "sunil.soren.test@gov.in",

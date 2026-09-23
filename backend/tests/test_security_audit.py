@@ -47,7 +47,7 @@ def test_full_security_and_authorization_audit():
             "password": "SecurePass@2026",
             "role": "APPLICANT"
         })
-        if res_a.status_code == 400:
+        if res_a.status_code in [400, 409]:
             # User might exist from previous run, login instead
             res_a = client.post("/api/auth/login", json={
                 "email": "sunita.audit@tribal.gov.in",
@@ -67,7 +67,7 @@ def test_full_security_and_authorization_audit():
             "password": "SecurePass@2026",
             "role": "APPLICANT"
         })
-        if res_b.status_code == 400:
+        if res_b.status_code in [400, 409]:
             res_b = client.post("/api/auth/login", json={
                 "email": "mangal.audit@tribal.gov.in",
                 "password": "SecurePass@2026"

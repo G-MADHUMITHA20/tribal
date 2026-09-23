@@ -87,6 +87,10 @@ class DatabaseManager:
         """
         if self.client:
             self.client.close()
+            self.client = None
+            self.db = None
+            self.is_connected = False
+            self.is_mock = False
             logger.info("MongoDB connection closed.")
 
 db_manager = DatabaseManager()
