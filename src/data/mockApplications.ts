@@ -9,7 +9,7 @@ export const INITIAL_MOCK_APPLICATIONS: ApplicationRecord[] = [
     submissionDate: '2025-08-14',
     lastUpdated: '2025-09-18',
     currentStageIndex: 3, // At Scrutiny stage
-    status: 'PROPOSED_FOR_SELECTION',
+    status: 'SELECTION',
     applicant: {
       id: 'APP-ST-8821',
       fullName: 'Sunita Soren',
@@ -134,7 +134,7 @@ export const INITIAL_MOCK_APPLICATIONS: ApplicationRecord[] = [
         actorRole: 'SYSTEM_AI',
         action: 'Document Information Extraction & Verification Pre-check',
         previousStatus: 'SUBMITTED',
-        newStatus: 'DOC_VERIFIED',
+        newStatus: 'DOCUMENT_VERIFICATION',
         remarks: 'OCR confidence 98%. All 3 mandatory fields matched without mismatch.'
       },
       {
@@ -143,8 +143,8 @@ export const INITIAL_MOCK_APPLICATIONS: ApplicationRecord[] = [
         actor: 'Registrar, University of Delhi',
         actorRole: 'OFFICER',
         action: 'Institution Nodal Officer Vetting',
-        previousStatus: 'DOC_VERIFIED',
-        newStatus: 'INSTITUTE_VERIFIED',
+        previousStatus: 'DOCUMENT_VERIFICATION',
+        newStatus: 'ELIGIBILITY_VERIFICATION',
         remarks: 'Verified scholar registration and full-time attendance on campus.'
       },
       {
@@ -153,8 +153,8 @@ export const INITIAL_MOCK_APPLICATIONS: ApplicationRecord[] = [
         actor: 'Shri Manoj Kumar (Deputy Secretary)',
         actorRole: 'OFFICER',
         action: 'Scrutiny Officer Recommendation',
-        previousStatus: 'INSTITUTE_VERIFIED',
-        newStatus: 'PROPOSED_FOR_SELECTION',
+        previousStatus: 'ELIGIBILITY_VERIFICATION',
+        newStatus: 'SELECTION',
         remarks: 'Document scrutiny passed. Placed on National Fellowship provisional merit roster.'
       }
     ]
@@ -167,7 +167,7 @@ export const INITIAL_MOCK_APPLICATIONS: ApplicationRecord[] = [
     submissionDate: '2025-08-28',
     lastUpdated: '2025-09-20',
     currentStageIndex: 2, // At Deficiency stage
-    status: 'DEFICIENCY_NOTIFIED',
+    status: 'DEFICIENT',
     applicant: {
       id: 'APP-ST-6720',
       fullName: 'Rahul Kumar Gond',
@@ -292,7 +292,7 @@ export const INITIAL_MOCK_APPLICATIONS: ApplicationRecord[] = [
         actorRole: 'SYSTEM_AI',
         action: 'Deficiency Rule Triggered',
         previousStatus: 'SUBMITTED',
-        newStatus: 'DEFICIENCY_NOTIFIED',
+        newStatus: 'DEFICIENT',
         remarks: 'Rule RULE_TOP_INC flagged certificate date mismatch (2022 vs current financial year).'
       },
       {
@@ -302,7 +302,7 @@ export const INITIAL_MOCK_APPLICATIONS: ApplicationRecord[] = [
         actorRole: 'OFFICER',
         action: 'Deficiency Notice Issued to Applicant',
         previousStatus: 'SUBMITTED',
-        newStatus: 'DEFICIENCY_NOTIFIED',
+        newStatus: 'DEFICIENT',
         remarks: 'System deficiency confirmed by scrutiny officer. Notification SMS & Email dispatched.'
       }
     ]
@@ -315,7 +315,7 @@ export const INITIAL_MOCK_APPLICATIONS: ApplicationRecord[] = [
     submissionDate: '2025-09-01',
     lastUpdated: '2025-09-15',
     currentStageIndex: 5,
-    status: 'DISBURSED_DBT',
+    status: 'APPROVED',
     applicant: {
       id: 'APP-ST-4029',
       fullName: 'Birsa Munda Marandi',
@@ -364,9 +364,9 @@ export const INITIAL_MOCK_APPLICATIONS: ApplicationRecord[] = [
     officerRemarks: 'Sanction approved. PFMS Transaction UTR: MOTA20250915904812 credited successfully.',
     auditTrail: [
       { id: 'AUD-30', timestamp: '2025-09-01 10:00:00', actor: 'Birsa Munda', actorRole: 'APPLICANT', action: 'Submitted Renewal Application', previousStatus: 'DRAFT', newStatus: 'SUBMITTED', remarks: 'Year 2 renewal' },
-      { id: 'AUD-31', timestamp: '2025-09-04 11:30:00', actor: 'St. Xavier’s College Nodal', actorRole: 'OFFICER', action: 'College Verification Completed', previousStatus: 'SUBMITTED', newStatus: 'INSTITUTE_VERIFIED', remarks: 'Bonafide confirmed' },
-      { id: 'AUD-32', timestamp: '2025-09-08 16:00:00', actor: 'DWO Khunti', actorRole: 'OFFICER', action: 'District Level Sanction', previousStatus: 'INSTITUTE_VERIFIED', newStatus: 'APPROVED', remarks: 'Sanction Order released' },
-      { id: 'AUD-33', timestamp: '2025-09-15 08:30:00', actor: 'PFMS DBT Gateway', actorRole: 'SYSTEM_AI', action: 'Direct Benefit Transfer Disbursed', previousStatus: 'APPROVED', newStatus: 'DISBURSED_DBT', remarks: '₹14,500 transferred to A/C *********1122 via Aadhaar Bridge.' }
+      { id: 'AUD-31', timestamp: '2025-09-04 11:30:00', actor: 'St. Xavier’s College Nodal', actorRole: 'OFFICER', action: 'College Verification Completed', previousStatus: 'SUBMITTED', newStatus: 'ELIGIBILITY_VERIFICATION', remarks: 'Bonafide confirmed' },
+      { id: 'AUD-32', timestamp: '2025-09-08 16:00:00', actor: 'DWO Khunti', actorRole: 'OFFICER', action: 'District Level Sanction', previousStatus: 'ELIGIBILITY_VERIFICATION', newStatus: 'APPROVED', remarks: 'Sanction Order released' },
+      { id: 'AUD-33', timestamp: '2025-09-15 08:30:00', actor: 'PFMS DBT Gateway', actorRole: 'SYSTEM_AI', action: 'Direct Benefit Transfer Disbursed', previousStatus: 'APPROVED', newStatus: 'APPROVED', remarks: '₹14,500 transferred to A/C *********1122 via Aadhaar Bridge.' }
     ]
   },
   {
@@ -377,7 +377,7 @@ export const INITIAL_MOCK_APPLICATIONS: ApplicationRecord[] = [
     submissionDate: '2025-09-05',
     lastUpdated: '2025-09-19',
     currentStageIndex: 2,
-    status: 'DOC_VERIFIED',
+    status: 'DOCUMENT_VERIFICATION',
     applicant: {
       id: 'APP-ST-9941',
       fullName: 'Anjali Kerketta',
@@ -436,7 +436,7 @@ export const INITIAL_MOCK_APPLICATIONS: ApplicationRecord[] = [
     officerRemarks: 'Unconditional offer from University of Edinburgh (QS Rank 27, well within Top 500 criteria). Awaiting Inter-Ministerial Steering Committee meeting.',
     auditTrail: [
       { id: 'AUD-40', timestamp: '2025-09-05 14:20:10', actor: 'Anjali Kerketta', actorRole: 'APPLICANT', action: 'Submitted Application for Overseas Fellowship', previousStatus: 'DRAFT', newStatus: 'SUBMITTED', remarks: 'Attached Edinburgh offer letter' },
-      { id: 'AUD-41', timestamp: '2025-09-05 14:20:15', actor: 'MoTA OCR & QS Rank Validator', actorRole: 'SYSTEM_AI', action: 'Automated Global University Verification', previousStatus: 'SUBMITTED', newStatus: 'DOC_VERIFIED', remarks: 'University QS rank 27 verified' }
+      { id: 'AUD-41', timestamp: '2025-09-05 14:20:15', actor: 'MoTA OCR & QS Rank Validator', actorRole: 'SYSTEM_AI', action: 'Automated Global University Verification', previousStatus: 'SUBMITTED', newStatus: 'DOCUMENT_VERIFICATION', remarks: 'University QS rank 27 verified' }
     ]
   }
 ];

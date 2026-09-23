@@ -137,8 +137,8 @@ export const SelectionBoardPage: React.FC = () => {
             <tbody className="divide-y divide-slate-200 bg-white">
               {sortedRoster.map((app, idx) => {
                 const meritScore = (app.academic.previousExamPercentage * 0.8 + 20).toFixed(1);
-                const isProposed = app.status === 'PROPOSED_FOR_SELECTION';
-                const isApproved = app.status === 'APPROVED' || app.status === 'DISBURSED_DBT';
+                const isProposed = app.status === 'SELECTION';
+                const isApproved = app.status === 'APPROVED';
 
                 return (
                   <tr key={app.id} className="hover:bg-slate-50/80 transition-colors">

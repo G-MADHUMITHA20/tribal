@@ -38,20 +38,20 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({
       title: 'Document & OCR Verification',
       description: 'Automated AI extraction and cross-verification of ST & Income proofs',
       responsibleAuthority: 'MoTA AI Verification Engine',
-      isCompleted: application.currentStageIndex >= 2 || application.status === 'DOC_VERIFIED' || application.status === 'PROPOSED_FOR_SELECTION' || application.status === 'APPROVED' || application.status === 'DISBURSED_DBT',
-      isDeficient: application.status === 'DEFICIENCY_NOTIFIED',
+      isCompleted: ['DOCUMENT_VERIFICATION', 'ELIGIBILITY_VERIFICATION', 'SCRUTINY', 'SELECTION', 'APPROVED'].includes(application.status),
+      isDeficient: application.status === 'DEFICIENT',
       date: application.lastUpdated,
-      remarks: application.status === 'DEFICIENCY_NOTIFIED'
-        ? application.deficiencyNotes || 'Deficiency detected in income certificate validity.'
-        : 'All mandatory certificates verified with 98% OCR confidence score.'
+      remarks: application.status === 'DEFICIENT'
+        ? application.deficiencyNotes || 'Deficiency detected in certificate validity.'
+        : 'All mandatory certificates verified with statutory confidence score.'
     },
     {
       index: 3,
       title: 'Institute Verification (INO)',
       description: 'Confirmation of regular enrollment, attendance, and fee structure',
       responsibleAuthority: 'University / Institute Nodal Officer',
-      isCompleted: application.currentStageIndex >= 3 || application.status === 'INSTITUTE_VERIFIED' || application.status === 'PROPOSED_FOR_SELECTION' || application.status === 'APPROVED' || application.status === 'DISBURSED_DBT',
-      date: '2025-08-20',
+      isCompleted: ['ELIGIBILITY_VERIFICATION', 'SCRUTINY', 'SELECTION', 'APPROVED'].includes(application.status),
+      date: '2026-02-20',
       remarks: 'Institute Nodal Officer verified bonafide enrollment and DRC approval.'
     },
     {
@@ -59,17 +59,17 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({
       title: 'Official Scrutiny Cell',
       description: 'State / Ministry Scrutiny Officer examination and rule cross-check',
       responsibleAuthority: 'MoTA Scrutiny Cell (Shastri Bhawan)',
-      isCompleted: application.currentStageIndex >= 4 || application.status === 'PROPOSED_FOR_SELECTION' || application.status === 'APPROVED' || application.status === 'DISBURSED_DBT',
-      date: '2025-09-18',
+      isCompleted: ['SCRUTINY', 'SELECTION', 'APPROVED'].includes(application.status),
+      date: '2026-03-01',
       remarks: application.officerRemarks || 'Statutory eligibility criteria passed.'
     },
     {
       index: 5,
       title: 'Selection Roster Proposal',
-      description: 'AI-assisted merit ranking and slot recommendation',
+      description: 'Merit ranking and slot recommendation',
       responsibleAuthority: 'Selection Proposal Engine',
-      isCompleted: application.status === 'PROPOSED_FOR_SELECTION' || application.status === 'APPROVED' || application.status === 'DISBURSED_DBT',
-      date: '2025-09-19',
+      isCompleted: ['SELECTION', 'APPROVED'].includes(application.status),
+      date: '2026-03-10',
       remarks: application.meritScore ? `Merit Score: ${application.meritScore} points. Recommended for selection.` : 'Under selection matrix evaluation.'
     },
     {
@@ -77,28 +77,28 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({
       title: 'Competent Officer Approval',
       description: 'Sanctioning Authority ratification and approval signature',
       responsibleAuthority: 'Director / Joint Secretary (MoTA)',
-      isCompleted: application.status === 'APPROVED' || application.status === 'SANCTIONED' || application.status === 'DISBURSED_DBT',
-      date: application.status === 'DISBURSED_DBT' ? '2025-09-10' : 'Pending',
-      remarks: application.status === 'DISBURSED_DBT' ? 'Sanction Order released.' : 'Awaiting National Selection Board ratification.'
+      isCompleted: application.status === 'APPROVED',
+      date: application.status === 'APPROVED' ? application.lastUpdated : 'Pending',
+      remarks: application.status === 'APPROVED' ? 'Sanction Order released.' : 'Awaiting National Selection Board ratification.'
     },
     {
       index: 7,
       title: 'Sanction Order & Award Letter',
       description: 'Electronic award letter generation with unique sanction number',
       responsibleAuthority: 'Ministry Sanctioning Authority',
-      isCompleted: application.status === 'SANCTIONED' || application.status === 'DISBURSED_DBT',
-      date: application.status === 'DISBURSED_DBT' ? '2025-09-12' : 'Pending',
-      remarks: 'Sanction Order generated.'
+      isCompleted: application.status === 'APPROVED',
+      date: application.status === 'APPROVED' ? application.lastUpdated : 'Pending',
+      remarks: application.status === 'APPROVED' ? 'Sanction Order generated.' : 'Pending sanction issuance.'
     },
     {
       index: 8,
       title: 'PFMS / DBT Direct Disbursement',
       description: 'Direct Treasury transfer into Aadhaar-seeded bank account',
       responsibleAuthority: 'PFMS DBT Gateway (Ministry of Finance)',
-      isCompleted: application.status === 'DISBURSED_DBT',
-      date: application.status === 'DISBURSED_DBT' ? '2025-09-15' : 'Pending',
-      remarks: application.status === 'DISBURSED_DBT'
-        ? 'Direct bank transfer credited via Aadhaar Payment Bridge. UTR: MOTA20250915904812.'
+      isCompleted: application.status === 'APPROVED',
+      date: application.status === 'APPROVED' ? application.lastUpdated : 'Pending',
+      remarks: application.status === 'APPROVED'
+        ? 'Direct bank transfer credited via Aadhaar Payment Bridge.'
         : 'Disbursement queued post-sanction.'
     }
   ];
@@ -120,13 +120,17 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({
         <div className="flex items-center gap-2">
           <span className="text-xs text-slate-300 font-medium hidden sm:inline">Current Stage:</span>
           <span className={`px-3 py-1 rounded text-xs font-black uppercase tracking-wider ${
-            application.status === 'DISBURSED_DBT'
+            application.status === 'APPROVED'
               ? 'bg-emerald-600 text-white'
-              : application.status === 'DEFICIENCY_NOTIFIED'
+              : application.status === 'DEFICIENT'
               ? 'bg-rose-600 text-white animate-pulse'
+              : application.status === 'REJECTED'
+              ? 'bg-red-600 text-white'
               : 'bg-amber-400 text-slate-950'
           }`}>
-            {application.status.replace(/_/g, ' ')}
+            {application.status === 'DOCUMENT_VERIFICATION' ? 'Document Verification'
+              : application.status === 'ELIGIBILITY_VERIFICATION' ? 'Eligibility Verification'
+              : application.status.replace(/_/g, ' ')}
           </span>
         </div>
       </div>
@@ -162,9 +166,9 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({
       <div className="p-6">
         <div className="relative border-l-2 border-slate-300 ml-4 sm:ml-6 space-y-6">
           {stages.map((stage) => {
-            const isCurrent = (application.status === 'DEFICIENCY_NOTIFIED' && stage.index === 2) ||
-              (application.status === 'PROPOSED_FOR_SELECTION' && stage.index === 5) ||
-              (application.status === 'DISBURSED_DBT' && stage.index === 8);
+            const isCurrent = (application.status === 'DEFICIENT' && stage.index === 2) ||
+              (application.status === 'SELECTION' && stage.index === 5) ||
+              (application.status === 'APPROVED' && stage.index === 6);
 
             return (
               <div key={stage.index} className="relative pl-6 sm:pl-8 group">

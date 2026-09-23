@@ -543,7 +543,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           return {
             ...app,
             status: newStatus,
-            hasDeficiency: newStatus === 'DEFICIENCY_NOTIFIED',
+            hasDeficiency: newStatus === 'DEFICIENT',
             lastUpdated: new Date().toISOString().substring(0, 10),
             officerRemarks: remarks || app.officerRemarks,
           };
@@ -561,11 +561,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (file && deficientDoc && deficientDoc.id && !deficientDoc.id.startsWith('DOC-AI')) {
         // Attempt backend document replacement
         await api.replaceDocument(deficientDoc.id, file);
-      } else {
-        await api.updateApplication(appId, {
-          status: 'SUBMITTED',
-        });
       }
+      
+      await api.updateApplication(appId, {
+        status: 'RESUBMITTED',
+      });
     } catch (err) {
       console.warn('Backend resolveApplicationDeficiency failed:', err);
     }

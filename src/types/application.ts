@@ -1,17 +1,14 @@
 export type ApplicationStatus =
   | 'DRAFT'
   | 'SUBMITTED'
-  | 'INSTITUTE_VERIFIED'
-  | 'DOC_VERIFICATION_PENDING'
-  | 'DOC_VERIFIED'
-  | 'DEFICIENCY_NOTIFIED'
-  | 'RESUBMITTED'
-  | 'SCRUTINY_PASSED'
-  | 'PROPOSED_FOR_SELECTION'
+  | 'DOCUMENT_VERIFICATION'
+  | 'ELIGIBILITY_VERIFICATION'
+  | 'SCRUTINY'
+  | 'SELECTION'
   | 'APPROVED'
-  | 'REJECTED'
-  | 'SANCTIONED'
-  | 'DISBURSED_DBT';
+  | 'DEFICIENT'
+  | 'RESUBMITTED'
+  | 'REJECTED';
 
 export interface ApplicantProfile {
   id: string;

@@ -33,12 +33,12 @@ export const AdminDashboardPage: React.FC = () => {
 
   // Metrics calculation
   const totalApps = 384210; // Demo population scale
-  const pendingVerification = applications.filter((a) => a.status === 'DOC_VERIFICATION_PENDING' || a.status === 'SUBMITTED').length + 420;
-  const eligibleCount = applications.filter((a) => a.status === 'DOC_VERIFIED' || a.status === 'PROPOSED_FOR_SELECTION').length + 1850;
-  const deficientCount = applications.filter((a) => a.hasDeficiency).length + 312;
-  const selectedCount = applications.filter((a) => a.status === 'PROPOSED_FOR_SELECTION' || a.status === 'APPROVED').length + 940;
-  const disbursedCount = applications.filter((a) => a.status === 'DISBURSED_DBT').length + 382000;
-  const pendingOfficerActions = applications.filter((a) => a.status === 'INSTITUTE_VERIFIED' || a.status === 'PROPOSED_FOR_SELECTION').length;
+  const pendingVerification = applications.filter((a) => a.status === 'DOCUMENT_VERIFICATION' || a.status === 'SUBMITTED' || a.status === 'RESUBMITTED').length + 420;
+  const eligibleCount = applications.filter((a) => a.status === 'ELIGIBILITY_VERIFICATION' || a.status === 'SCRUTINY' || a.status === 'SELECTION').length + 1850;
+  const deficientCount = applications.filter((a) => a.hasDeficiency || a.status === 'DEFICIENT').length + 312;
+  const selectedCount = applications.filter((a) => a.status === 'SELECTION' || a.status === 'APPROVED').length + 940;
+  const disbursedCount = applications.filter((a) => a.status === 'APPROVED').length + 382000;
+  const pendingOfficerActions = applications.filter((a) => a.status === 'DOCUMENT_VERIFICATION' || a.status === 'ELIGIBILITY_VERIFICATION' || a.status === 'SCRUTINY' || a.status === 'SELECTION').length;
 
   // Chart 1: Applications by Scheme
   const dataByScheme = [

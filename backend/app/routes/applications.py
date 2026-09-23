@@ -8,7 +8,8 @@ from app.schemas.application import (
     ApplicationCreate,
     ApplicationUpdate,
     ApplicationResponse,
-    ApplicationStatus
+    ApplicationStatus,
+    ALLOWED_STATUS_TRANSITIONS
 )
 from app.services.application_service import generate_application_id
 
@@ -54,6 +55,24 @@ async def create_application(
     }
 
     await db["applications"].insert_one(app_doc)
+
+    # Record application submission in audit_logs
+    audit_entry = {
+        "_id": f"AUD-{int(now.timestamp() * 1000)}",
+        "id": f"AUD-{int(now.timestamp() * 1000)}",
+        "timestamp": now,
+        "actor": current_user.get("name") or current_user.get("email") or "Citizen Applicant",
+        "role": current_user.get("role", "APPLICANT"),
+        "action": f"Application Created with status {app_in.status.value}",
+        "applicationId": app_id,
+        "schemeCode": app_in.scheme_id,
+        "previousStatus": "DRAFT",
+        "newStatus": app_in.status.value,
+        "reason": f"New scholarship application lodged for {scheme_name}",
+        "remarks": f"Applied for {scheme_name}",
+        "ipAddress": "10.14.88.22 (MoTA Portal Gateway)"
+    }
+    await db["audit_logs"].insert_one(audit_entry)
 
     return ApplicationResponse(**app_doc)
 
@@ -129,7 +148,8 @@ async def update_application(
             detail="Unauthorized: You cannot modify an application submitted by another user."
         )
 
-    update_fields = {"updated_at": datetime.now(timezone.utc)}
+    now = datetime.now(timezone.utc)
+    update_fields = {"updated_at": now}
 
     if app_update.personal_details:
         update_fields["personal_details"] = app_update.personal_details.model_dump()
@@ -140,10 +160,43 @@ async def update_application(
     if app_update.documents is not None:
         update_fields["documents"] = [d.model_dump() for d in app_update.documents]
     if app_update.status:
+        prev_status_str = existing_app.get("status")
+        try:
+            prev_status = ApplicationStatus(prev_status_str)
+        except ValueError:
+            prev_status = None
+
+        if prev_status and app_update.status != prev_status:
+            allowed_targets = ALLOWED_STATUS_TRANSITIONS.get(prev_status, [])
+            if app_update.status not in allowed_targets:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Invalid status transition from '{prev_status_str}' to '{app_update.status.value}'. Allowed transitions: {[s.value for s in allowed_targets]}"
+                )
+
         update_fields["status"] = app_update.status.value
-        if app_update.status == ApplicationStatus.SUBMITTED:
+        if app_update.status in [ApplicationStatus.SUBMITTED, ApplicationStatus.RESUBMITTED]:
             update_fields["has_deficiency"] = False
             update_fields["deficiency_notes"] = None
+
+        # Record in audit_logs
+        actor_name = current_user.get("name") or current_user.get("email") or "Citizen Applicant"
+        audit_entry = {
+            "_id": f"AUD-{int(now.timestamp() * 1000)}",
+            "id": f"AUD-{int(now.timestamp() * 1000)}",
+            "timestamp": now,
+            "actor": actor_name,
+            "role": user_role or "APPLICANT",
+            "action": f"Application Status Changed to {app_update.status.value}",
+            "applicationId": application_id,
+            "schemeCode": existing_app.get("scheme_id"),
+            "previousStatus": prev_status_str,
+            "newStatus": app_update.status.value,
+            "reason": "Application update / resubmission by citizen",
+            "remarks": "Status updated by applicant",
+            "ipAddress": "10.14.88.22 (MoTA Portal Gateway)"
+        }
+        await db["audit_logs"].insert_one(audit_entry)
 
     await db["applications"].update_one({"_id": application_id}, {"$set": update_fields})
     updated_doc = await db["applications"].find_one({"_id": application_id})

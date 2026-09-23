@@ -6,14 +6,40 @@ from pydantic import BaseModel, Field
 class ApplicationStatus(str, Enum):
     DRAFT = "DRAFT"
     SUBMITTED = "SUBMITTED"
-    RESUBMITTED = "RESUBMITTED"
     DOCUMENT_VERIFICATION = "DOCUMENT_VERIFICATION"
     ELIGIBILITY_VERIFICATION = "ELIGIBILITY_VERIFICATION"
     SCRUTINY = "SCRUTINY"
     SELECTION = "SELECTION"
     APPROVED = "APPROVED"
     DEFICIENT = "DEFICIENT"
+    RESUBMITTED = "RESUBMITTED"
     REJECTED = "REJECTED"
+
+# Canonical lifecycle transition rules
+ALLOWED_STATUS_TRANSITIONS: Dict[ApplicationStatus, List[ApplicationStatus]] = {
+    ApplicationStatus.DRAFT: [ApplicationStatus.SUBMITTED],
+    ApplicationStatus.SUBMITTED: [ApplicationStatus.DOCUMENT_VERIFICATION],
+    ApplicationStatus.DOCUMENT_VERIFICATION: [
+        ApplicationStatus.ELIGIBILITY_VERIFICATION,
+        ApplicationStatus.DEFICIENT,
+        ApplicationStatus.REJECTED,
+    ],
+    ApplicationStatus.ELIGIBILITY_VERIFICATION: [
+        ApplicationStatus.SCRUTINY,
+        ApplicationStatus.DEFICIENT,
+        ApplicationStatus.REJECTED,
+    ],
+    ApplicationStatus.SCRUTINY: [
+        ApplicationStatus.SELECTION,
+        ApplicationStatus.DEFICIENT,
+        ApplicationStatus.REJECTED,
+    ],
+    ApplicationStatus.DEFICIENT: [ApplicationStatus.RESUBMITTED],
+    ApplicationStatus.RESUBMITTED: [ApplicationStatus.DOCUMENT_VERIFICATION],
+    ApplicationStatus.SELECTION: [ApplicationStatus.APPROVED, ApplicationStatus.REJECTED],
+    ApplicationStatus.APPROVED: [],
+    ApplicationStatus.REJECTED: [],
+}
 
 class PersonalDetails(BaseModel):
     full_name: str

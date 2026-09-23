@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 
 from app.database.mongodb import get_database
 from app.core.security import require_officer_or_admin
-from app.schemas.application import ApplicationResponse, ApplicationStatus
+from app.schemas.application import ApplicationResponse, ApplicationStatus, ALLOWED_STATUS_TRANSITIONS
 from app.schemas.grievance import GrievanceResponse, GrievanceStatus
 
 router = APIRouter(prefix="/admin", tags=["Admin & Analytics"])
@@ -152,8 +152,22 @@ async def update_application_status_officer(
         )
 
     now = datetime.now(timezone.utc)
-    prev_status = existing.get("status")
-    has_deficiency = payload.status in [ApplicationStatus.DEFICIENT]
+    prev_status_str = existing.get("status")
+    try:
+        prev_status = ApplicationStatus(prev_status_str)
+    except ValueError:
+        prev_status = None
+
+    # Validate transition against canonical state workflow
+    if prev_status and payload.status != prev_status:
+        allowed_targets = ALLOWED_STATUS_TRANSITIONS.get(prev_status, [])
+        if payload.status not in allowed_targets:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid status transition from '{prev_status_str}' to '{payload.status.value}'. Allowed transitions: {[s.value for s in allowed_targets]}"
+            )
+
+    has_deficiency = payload.status == ApplicationStatus.DEFICIENT
     officer = payload.officer_name or user.get("name") or user.get("email") or "Authorized MoTA Officer"
 
     update_fields = {
@@ -163,6 +177,10 @@ async def update_application_status_officer(
     }
     if payload.remarks:
         update_fields["officer_remarks"] = payload.remarks
+        if has_deficiency:
+            update_fields["deficiency_notes"] = payload.remarks
+    elif not has_deficiency:
+        update_fields["deficiency_notes"] = None
 
     await db["applications"].update_one({"_id": application_id}, {"$set": update_fields})
 
@@ -176,7 +194,7 @@ async def update_application_status_officer(
         "action": f"Application Status Changed to {payload.status.value}",
         "applicationId": application_id,
         "schemeCode": existing.get("scheme_id"),
-        "previousStatus": prev_status,
+        "previousStatus": prev_status_str,
         "newStatus": payload.status.value,
         "reason": payload.remarks or "Officer administrative review action",
         "remarks": payload.remarks or "",

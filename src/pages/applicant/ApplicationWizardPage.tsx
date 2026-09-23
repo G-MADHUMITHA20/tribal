@@ -376,8 +376,8 @@ export const ApplicationWizardPage: React.FC = () => {
       schemeName: selectedScheme.name,
       submissionDate: new Date().toISOString().substring(0, 10),
       lastUpdated: new Date().toISOString().substring(0, 10),
-      currentStageIndex: 2,
-      status: 'DOC_VERIFICATION_PENDING',
+      currentStageIndex: 1,
+      status: 'SUBMITTED',
       applicant: {
         id: currentUser?.id || 'APP-ST-' + Math.floor(1000 + Math.random() * 9000),
         fullName: fullName.trim(),

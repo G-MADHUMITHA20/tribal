@@ -67,8 +67,8 @@ export const ApplicationQueuePage: React.FC = () => {
         total: schemeApps.length,
         draft: schemeApps.filter(a => a.status === 'DRAFT').length,
         submitted: schemeApps.filter(a => ['SUBMITTED', 'RESUBMITTED'].includes(a.status)).length,
-        verificationPending: schemeApps.filter(a => ['INSTITUTE_VERIFIED', 'DOC_VERIFICATION_PENDING', 'DEFICIENCY_NOTIFIED'].includes(a.status)).length,
-        approved: schemeApps.filter(a => ['APPROVED', 'SANCTIONED', 'DISBURSED_DBT', 'PROPOSED_FOR_SELECTION'].includes(a.status)).length,
+        verificationPending: schemeApps.filter(a => ['DOCUMENT_VERIFICATION', 'ELIGIBILITY_VERIFICATION', 'SCRUTINY', 'DEFICIENT'].includes(a.status)).length,
+        approved: schemeApps.filter(a => ['APPROVED', 'SELECTION'].includes(a.status)).length,
         rejected: schemeApps.filter(a => a.status === 'REJECTED').length,
       };
     });
@@ -189,12 +189,14 @@ export const ApplicationQueuePage: React.FC = () => {
               >
                 <option value="ALL">All Statuses</option>
                 <option value="SUBMITTED">Submitted</option>
-                <option value="INSTITUTE_VERIFIED">Institute Verified</option>
-                <option value="DEFICIENCY_NOTIFIED">Deficiency Notified</option>
+                <option value="DOCUMENT_VERIFICATION">Document Verification</option>
+                <option value="ELIGIBILITY_VERIFICATION">Eligibility Verification</option>
+                <option value="SCRUTINY">Scrutiny</option>
+                <option value="SELECTION">Selection</option>
+                <option value="DEFICIENT">Deficient</option>
                 <option value="RESUBMITTED">Resubmitted</option>
-                <option value="PROPOSED_FOR_SELECTION">Proposed for Selection</option>
                 <option value="APPROVED">Approved</option>
-                <option value="DISBURSED_DBT">Disbursed (DBT)</option>
+                <option value="REJECTED">Rejected</option>
               </select>
             </div>
 
@@ -272,16 +274,22 @@ export const ApplicationQueuePage: React.FC = () => {
                   <td className="px-4 py-3 whitespace-nowrap">
                     <span
                       className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
-                        app.status === 'DISBURSED_DBT'
+                        app.status === 'APPROVED'
                           ? 'bg-emerald-100 text-emerald-800'
-                          : app.status === 'DEFICIENCY_NOTIFIED'
+                          : app.status === 'DEFICIENT'
                           ? 'bg-rose-100 text-rose-800 animate-pulse'
-                          : app.status === 'PROPOSED_FOR_SELECTION'
+                          : app.status === 'REJECTED'
+                          ? 'bg-red-100 text-red-800'
+                          : app.status === 'SELECTION'
                           ? 'bg-indigo-100 text-indigo-900'
+                          : app.status === 'SCRUTINY'
+                          ? 'bg-purple-100 text-purple-900'
                           : 'bg-amber-100 text-amber-900'
                       }`}
                     >
-                      {app.status.replace(/_/g, ' ')}
+                      {app.status === 'DOCUMENT_VERIFICATION' ? 'Document Verification'
+                        : app.status === 'ELIGIBILITY_VERIFICATION' ? 'Eligibility Verification'
+                        : app.status.replace(/_/g, ' ')}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-right whitespace-nowrap">
@@ -481,61 +489,105 @@ export const ApplicationQueuePage: React.FC = () => {
               </button>
 
               <div className="flex flex-wrap items-center gap-2">
-                {/* Request Correction (Deficiency) */}
-                <button
-                  onClick={() =>
-                    handleAction(
-                      'DEFICIENCY_NOTIFIED',
-                      officerRemarksInput || 'Deficiency: Income certificate validity requires FY 2024-25 issuance.'
-                    )
-                  }
-                  className="px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded shadow-sm flex items-center gap-1.5"
-                >
-                  <AlertTriangle className="w-4 h-4" />
-                  <span>Request Correction (Deficiency)</span>
-                </button>
+                {/* Request Correction (Deficiency) - Available during verification & scrutiny */}
+                {['SUBMITTED', 'RESUBMITTED', 'DOCUMENT_VERIFICATION', 'ELIGIBILITY_VERIFICATION', 'SCRUTINY'].includes(inspectingApp.status) && (
+                  <button
+                    onClick={() =>
+                      handleAction(
+                        'DEFICIENT',
+                        officerRemarksInput || 'Deficiency: Document requires re-upload and correction.'
+                      )
+                    }
+                    className="px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded shadow-sm flex items-center gap-1.5"
+                  >
+                    <AlertTriangle className="w-4 h-4" />
+                    <span>Request Correction (Deficiency)</span>
+                  </button>
+                )}
 
-                {/* Reject */}
-                <button
-                  onClick={() =>
-                    handleAction(
-                      'REJECTED',
-                      officerRemarksInput || 'Application does not meet statutory eligibility guidelines.'
-                    )
-                  }
-                  className="px-3.5 py-2 bg-rose-700 hover:bg-rose-800 text-white font-bold rounded shadow-sm flex items-center gap-1.5"
-                >
-                  <XCircle className="w-4 h-4" />
-                  <span>Reject with Reason</span>
-                </button>
+                {/* Reject - Available before terminal state */}
+                {!['APPROVED', 'REJECTED'].includes(inspectingApp.status) && (
+                  <button
+                    onClick={() =>
+                      handleAction(
+                        'REJECTED',
+                        officerRemarksInput || 'Application does not meet statutory eligibility guidelines.'
+                      )
+                    }
+                    className="px-3.5 py-2 bg-rose-700 hover:bg-rose-800 text-white font-bold rounded shadow-sm flex items-center gap-1.5"
+                  >
+                    <XCircle className="w-4 h-4" />
+                    <span>Reject with Reason</span>
+                  </button>
+                )}
 
-                {/* Verify / Recommend for Selection */}
-                <button
-                  onClick={() =>
-                    handleAction(
-                      'PROPOSED_FOR_SELECTION',
-                      officerRemarksInput || 'All documents verified and recommended for National Selection Board.'
-                    )
-                  }
-                  className="px-4 py-2 bg-[#0b2853] hover:bg-[#134685] text-white font-bold rounded shadow-sm flex items-center gap-1.5"
-                >
-                  <FileCheck2 className="w-4 h-4 text-amber-400" />
-                  <span>Verify & Propose for Selection</span>
-                </button>
-
-                {/* Final Sanction / Approve */}
-                <button
-                  onClick={() =>
-                    handleAction(
-                      'APPROVED',
-                      officerRemarksInput || 'Sanction ratified by Competent Sanctioning Authority.'
-                    )
-                  }
-                  className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded shadow-sm flex items-center gap-1.5"
-                >
-                  <CheckCircle className="w-4 h-4" />
-                  <span>Approve & Release Sanction</span>
-                </button>
+                {/* Canonical Forward Progression */}
+                {inspectingApp.status === 'SUBMITTED' || inspectingApp.status === 'RESUBMITTED' ? (
+                  <button
+                    onClick={() =>
+                      handleAction(
+                        'DOCUMENT_VERIFICATION',
+                        officerRemarksInput || 'Commencing official document and certificate verification.'
+                      )
+                    }
+                    className="px-4 py-2 bg-[#0b2853] hover:bg-[#134685] text-white font-bold rounded shadow-sm flex items-center gap-1.5"
+                  >
+                    <FileCheck2 className="w-4 h-4 text-amber-400" />
+                    <span>Verify Documents</span>
+                  </button>
+                ) : inspectingApp.status === 'DOCUMENT_VERIFICATION' ? (
+                  <button
+                    onClick={() =>
+                      handleAction(
+                        'ELIGIBILITY_VERIFICATION',
+                        officerRemarksInput || 'Document verification passed. Forwarded to Eligibility Verification.'
+                      )
+                    }
+                    className="px-4 py-2 bg-[#0b2853] hover:bg-[#134685] text-white font-bold rounded shadow-sm flex items-center gap-1.5"
+                  >
+                    <FileCheck2 className="w-4 h-4 text-amber-400" />
+                    <span>Pass Document Verification</span>
+                  </button>
+                ) : inspectingApp.status === 'ELIGIBILITY_VERIFICATION' ? (
+                  <button
+                    onClick={() =>
+                      handleAction(
+                        'SCRUTINY',
+                        officerRemarksInput || 'Eligibility criteria satisfied. Forwarded to Official Scrutiny.'
+                      )
+                    }
+                    className="px-4 py-2 bg-[#0b2853] hover:bg-[#134685] text-white font-bold rounded shadow-sm flex items-center gap-1.5"
+                  >
+                    <FileCheck2 className="w-4 h-4 text-amber-400" />
+                    <span>Pass to Scrutiny Cell</span>
+                  </button>
+                ) : inspectingApp.status === 'SCRUTINY' ? (
+                  <button
+                    onClick={() =>
+                      handleAction(
+                        'SELECTION',
+                        officerRemarksInput || 'Official scrutiny passed. Recommended for National Selection Board.'
+                      )
+                    }
+                    className="px-4 py-2 bg-[#0b2853] hover:bg-[#134685] text-white font-bold rounded shadow-sm flex items-center gap-1.5"
+                  >
+                    <FileCheck2 className="w-4 h-4 text-amber-400" />
+                    <span>Recommend for Selection</span>
+                  </button>
+                ) : inspectingApp.status === 'SELECTION' ? (
+                  <button
+                    onClick={() =>
+                      handleAction(
+                        'APPROVED',
+                        officerRemarksInput || 'Sanction ratified by Competent Sanctioning Authority.'
+                      )
+                    }
+                    className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded shadow-sm flex items-center gap-1.5"
+                  >
+                    <CheckCircle className="w-4 h-4" />
+                    <span>Approve & Release Sanction</span>
+                  </button>
+                ) : null}
               </div>
             </div>
           </div>
