@@ -67,6 +67,7 @@ function transformBackendScheme(backendScheme: any): SchemeConfig {
     description: backendScheme.description || (fallback?.description ?? ''),
     portalCategory: backendScheme.portal_category || backendScheme.portalCategory || (fallback?.portalCategory ?? 'Centrally Sponsored'),
     isOpen: backendScheme.is_open !== undefined ? Boolean(backendScheme.is_open) : (backendScheme.isOpen !== undefined ? Boolean(backendScheme.isOpen) : (fallback?.isOpen ?? true)),
+    isDatasetOriginal: backendScheme.is_dataset_original !== undefined ? Boolean(backendScheme.is_dataset_original) : (backendScheme.isDatasetOriginal !== undefined ? Boolean(backendScheme.isDatasetOriginal) : (fallback?.isDatasetOriginal ?? false)),
     academicYear: backendScheme.academic_year || backendScheme.academicYear || (fallback?.academicYear ?? '2025-2026'),
     applicationDeadline: backendScheme.application_deadline || backendScheme.applicationDeadline || (fallback?.applicationDeadline ?? '2025-11-30'),
     targetCommunity: backendScheme.target_community || backendScheme.targetCommunity || (fallback?.targetCommunity ?? 'Scheduled Tribes (ST)'),
@@ -106,6 +107,7 @@ function toBackendSchemePayload(scheme: SchemeConfig): any {
     description: scheme.description,
     portal_category: scheme.portalCategory,
     is_open: scheme.isOpen,
+    is_dataset_original: scheme.isDatasetOriginal,
     academic_year: scheme.academicYear,
     application_deadline: scheme.applicationDeadline,
     target_community: scheme.targetCommunity,
@@ -384,6 +386,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const updateScheme = async (updated: SchemeConfig) => {
+    if (updated.isDatasetOriginal) {
+      throw new Error('Cannot modify protected dataset scheme.');
+    }
+
     // 1. Optimistic update
     setSchemes((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
 

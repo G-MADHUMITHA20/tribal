@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
 import { ApplicationRecord } from '../../types/application';
 import { DocumentOcrViewer } from '../../components/document-ai/DocumentOcrViewer';
@@ -21,9 +21,9 @@ import {
 import { api } from '../../services/api';
 
 export const ApplicationQueuePage: React.FC = () => {
-  const { applications, updateApplicationStatus, currentUser } = useApp();
+  const { applications, schemes, updateApplicationStatus, currentUser } = useApp();
 
-  const [selectedSchemeFilter, setSelectedSchemeFilter] = useState<string>('ALL');
+  const [selectedSchemeId, setSelectedSchemeId] = useState<string | null>(null);
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('ALL');
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [inspectingApp, setInspectingApp] = useState<ApplicationRecord | null>(null);
@@ -31,20 +31,48 @@ export const ApplicationQueuePage: React.FC = () => {
   // Action dialog states
   const [officerRemarksInput, setOfficerRemarksInput] = useState<string>('');
 
-  const filteredApps = applications.filter((app) => {
-    if (selectedSchemeFilter !== 'ALL' && app.schemeId !== selectedSchemeFilter) return false;
-    if (selectedStatusFilter !== 'ALL' && app.status !== selectedStatusFilter) return false;
-    if (searchTerm.trim()) {
-      const q = searchTerm.toLowerCase();
-      return (
-        app.id.toLowerCase().includes(q) ||
-        app.applicant.fullName.toLowerCase().includes(q) ||
-        app.schemeName.toLowerCase().includes(q) ||
-        app.academic.institutionName.toLowerCase().includes(q)
-      );
-    }
-    return true;
-  });
+  const selectedScheme = useMemo(() => {
+    return schemes.find(s => s.id === selectedSchemeId || s.code === selectedSchemeId) || null;
+  }, [schemes, selectedSchemeId]);
+
+  const filteredApps = useMemo(() => {
+    if (!selectedScheme) return [];
+    
+    return applications.filter((app) => {
+      // 1. Strict scheme matching
+      const matchesScheme = app.schemeCode === selectedScheme.code || app.schemeId === selectedScheme.id;
+      if (!matchesScheme) return false;
+      
+      // 2. Status matching
+      if (selectedStatusFilter !== 'ALL' && app.status !== selectedStatusFilter) return false;
+      
+      // 3. Search matching
+      if (searchTerm.trim()) {
+        const q = searchTerm.toLowerCase();
+        return (
+          app.id.toLowerCase().includes(q) ||
+          app.applicant.fullName.toLowerCase().includes(q) ||
+          app.academic.institutionName.toLowerCase().includes(q)
+        );
+      }
+      return true;
+    });
+  }, [applications, selectedScheme, selectedStatusFilter, searchTerm]);
+
+  const schemeStats = useMemo(() => {
+    return schemes.map(s => {
+      const schemeApps = applications.filter(a => a.schemeCode === s.code || a.schemeId === s.id);
+      return {
+        scheme: s,
+        total: schemeApps.length,
+        draft: schemeApps.filter(a => a.status === 'DRAFT').length,
+        submitted: schemeApps.filter(a => ['SUBMITTED', 'RESUBMITTED'].includes(a.status)).length,
+        verificationPending: schemeApps.filter(a => ['INSTITUTE_VERIFIED', 'DOC_VERIFICATION_PENDING', 'DEFICIENCY_NOTIFIED'].includes(a.status)).length,
+        approved: schemeApps.filter(a => ['APPROVED', 'SANCTIONED', 'DISBURSED_DBT', 'PROPOSED_FOR_SELECTION'].includes(a.status)).length,
+        rejected: schemeApps.filter(a => a.status === 'REJECTED').length,
+      };
+    });
+  }, [applications, schemes]);
 
   const handleAction = (status: ApplicationRecord['status'], remarks: string) => {
     if (!inspectingApp) return;
@@ -76,69 +104,125 @@ export const ApplicationQueuePage: React.FC = () => {
         </div>
       </div>
 
-      {/* Filters Bar */}
-      <div className="bg-white p-4 rounded border border-slate-300 shadow-sm flex flex-wrap items-center justify-between gap-3 text-xs">
-        <div className="flex flex-wrap items-center gap-3 flex-1">
-          {/* Search input */}
-          <div className="relative min-w-[200px] flex-1 sm:flex-none">
-            <input
-              type="text"
-              placeholder="Search Candidate, ID, College..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-300 rounded focus:ring-2 focus:ring-blue-800"
-            />
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2" />
+      {/* Conditional Rendering: Scheme Selection vs Application Queue */}
+      {!selectedScheme ? (
+        <div className="space-y-4">
+          <div className="flex items-center gap-2 mb-4">
+            <h2 className="text-lg font-bold text-slate-800">Select Scheme to Manage Applications</h2>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {schemeStats.map(stat => (
+              <div 
+                key={stat.scheme.id}
+                onClick={() => setSelectedSchemeId(stat.scheme.id)}
+                className="bg-white border border-slate-300 rounded p-4 shadow-sm hover:shadow-md hover:border-blue-400 cursor-pointer transition-all flex flex-col h-full"
+              >
+                <div className="flex-1">
+                  <div className="text-[10px] font-mono font-bold text-slate-500 mb-1">{stat.scheme.code}</div>
+                  <h3 className="font-bold text-blue-950 mb-2 line-clamp-2">{stat.scheme.name}</h3>
+                </div>
+                
+                <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
+                  <div className="bg-slate-50 p-2 rounded border border-slate-200">
+                    <div className="text-slate-500 text-[10px] uppercase font-bold">Total</div>
+                    <div className="font-black text-lg text-slate-800">{stat.total}</div>
+                  </div>
+                  <div className="bg-blue-50 p-2 rounded border border-blue-100">
+                    <div className="text-blue-600 text-[10px] uppercase font-bold">Submitted</div>
+                    <div className="font-black text-lg text-blue-900">{stat.submitted}</div>
+                  </div>
+                  <div className="bg-amber-50 p-2 rounded border border-amber-100">
+                    <div className="text-amber-600 text-[10px] uppercase font-bold">Pending</div>
+                    <div className="font-black text-lg text-amber-900">{stat.verificationPending}</div>
+                  </div>
+                  <div className="bg-emerald-50 p-2 rounded border border-emerald-100">
+                    <div className="text-emerald-600 text-[10px] uppercase font-bold">Approved</div>
+                    <div className="font-black text-lg text-emerald-900">{stat.approved}</div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <button 
+                onClick={() => {
+                  setSelectedSchemeId(null);
+                  setSearchTerm('');
+                  setSelectedStatusFilter('ALL');
+                }}
+                className="text-blue-700 hover:text-blue-900 font-bold text-xs flex items-center gap-1 mb-2"
+              >
+                ← Back to Scheme Selection
+              </button>
+              <h2 className="text-lg font-bold text-slate-800">
+                {selectedScheme.name}
+              </h2>
+              <div className="text-xs text-slate-500 font-mono mt-0.5">{selectedScheme.code}</div>
+            </div>
           </div>
 
-          {/* Scheme filter */}
-          <select
-            value={selectedSchemeFilter}
-            onChange={(e) => setSelectedSchemeFilter(e.target.value)}
-            className="p-1.5 bg-slate-50 border border-slate-300 rounded font-medium text-slate-800"
-          >
-            <option value="ALL">All Schemes</option>
-            <option value="national-fellowship-st">National Fellowship (Ph.D.)</option>
-            <option value="national-scholarship-top-class">Top Class Premier Institutes</option>
-            <option value="post-matric-st">Post-Matric ST</option>
-            <option value="pre-matric-st">Pre-Matric ST</option>
-            <option value="national-overseas-scholarship-st">National Overseas</option>
-          </select>
+          {/* Filters Bar */}
+          <div className="bg-white p-4 rounded border border-slate-300 shadow-sm flex flex-wrap items-center justify-between gap-3 text-xs">
+            <div className="flex flex-wrap items-center gap-3 flex-1">
+              {/* Search input */}
+              <div className="relative min-w-[200px] flex-1 sm:flex-none">
+                <input
+                  type="text"
+                  placeholder="Search Candidate, ID, College..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-300 rounded focus:ring-2 focus:ring-blue-800"
+                />
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2" />
+              </div>
 
-          {/* Status filter */}
-          <select
-            value={selectedStatusFilter}
-            onChange={(e) => setSelectedStatusFilter(e.target.value)}
-            className="p-1.5 bg-slate-50 border border-slate-300 rounded font-medium text-slate-800"
-          >
-            <option value="ALL">All Statuses</option>
-            <option value="SUBMITTED">Submitted</option>
-            <option value="INSTITUTE_VERIFIED">Institute Verified</option>
-            <option value="DEFICIENCY_NOTIFIED">Deficiency Notified</option>
-            <option value="RESUBMITTED">Resubmitted</option>
-            <option value="PROPOSED_FOR_SELECTION">Proposed for Selection</option>
-            <option value="APPROVED">Approved</option>
-            <option value="DISBURSED_DBT">Disbursed (DBT)</option>
-          </select>
-        </div>
+              {/* Status filter */}
+              <select
+                value={selectedStatusFilter}
+                onChange={(e) => setSelectedStatusFilter(e.target.value)}
+                className="p-1.5 bg-slate-50 border border-slate-300 rounded font-medium text-slate-800"
+              >
+                <option value="ALL">All Statuses</option>
+                <option value="SUBMITTED">Submitted</option>
+                <option value="INSTITUTE_VERIFIED">Institute Verified</option>
+                <option value="DEFICIENCY_NOTIFIED">Deficiency Notified</option>
+                <option value="RESUBMITTED">Resubmitted</option>
+                <option value="PROPOSED_FOR_SELECTION">Proposed for Selection</option>
+                <option value="APPROVED">Approved</option>
+                <option value="DISBURSED_DBT">Disbursed (DBT)</option>
+              </select>
+            </div>
 
-        <button
-          onClick={() => {
-            setSelectedSchemeFilter('ALL');
-            setSelectedStatusFilter('ALL');
-            setSearchTerm('');
-          }}
-          className="text-slate-600 hover:text-slate-900 flex items-center gap-1 font-medium"
-        >
-          <RotateCcw className="w-3.5 h-3.5" />
-          <span>Reset</span>
-        </button>
-      </div>
+            <button
+              onClick={() => {
+                setSelectedStatusFilter('ALL');
+                setSearchTerm('');
+              }}
+              className="text-slate-600 hover:text-slate-900 flex items-center gap-1 font-medium"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>Reset</span>
+            </button>
+          </div>
 
-      {/* Applications Table */}
-      <div className="bg-white border border-slate-300 rounded shadow-sm overflow-hidden text-xs">
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-slate-200">
+          {/* Applications Table */}
+          {filteredApps.length === 0 ? (
+            <div className="bg-white border border-slate-300 rounded shadow-sm p-10 text-center flex flex-col items-center">
+              <FileCheck2 className="w-12 h-12 text-slate-300 mb-3" />
+              <h3 className="text-slate-700 font-bold text-sm">No applications found</h3>
+              <p className="text-slate-500 text-xs mt-1">
+                No applications have been submitted for this scheme yet matching the current filters.
+              </p>
+            </div>
+          ) : (
+            <div className="bg-white border border-slate-300 rounded shadow-sm overflow-hidden text-xs">
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-slate-200">
             <thead className="bg-[#0b2853] text-white">
               <tr>
                 <th className="px-4 py-3 text-left font-bold uppercase tracking-wider">Application ID</th>
@@ -215,6 +299,9 @@ export const ApplicationQueuePage: React.FC = () => {
           </table>
         </div>
       </div>
+          )}
+        </div>
+      )}
 
       {/* Application Scrutiny & Review Modal */}
       {inspectingApp && (

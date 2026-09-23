@@ -61,6 +61,7 @@ export interface SchemeConfig {
   description: string;
   portalCategory: string;
   isOpen: boolean;
+  isDatasetOriginal?: boolean;
   academicYear: string;
   applicationDeadline: string;
   targetCommunity: string; // "Scheduled Tribes (ST)"

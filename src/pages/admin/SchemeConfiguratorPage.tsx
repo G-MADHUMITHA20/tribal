@@ -44,6 +44,8 @@ export const SchemeConfiguratorPage: React.FC = () => {
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
+  const isProtected = scheme.isDatasetOriginal;
+
   // Synchronize fields when selecting another scheme
   const handleSelectScheme = (id: string) => {
     const s = schemes.find((item) => item.id === id);
@@ -63,6 +65,7 @@ export const SchemeConfiguratorPage: React.FC = () => {
 
   const handleAddRule = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isProtected) return;
     const newCriterion: EligibilityCriterion = {
       id: 'RULE_CUSTOM_' + Math.floor(1000 + Math.random() * 9000),
       field: newRuleField,
@@ -78,11 +81,16 @@ export const SchemeConfiguratorPage: React.FC = () => {
   };
 
   const handleDeleteRule = (id: string) => {
+    if (isProtected) return;
     setRules((prev) => prev.filter((r) => r.id !== id));
   };
 
   const handleSaveConfiguration = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isProtected) {
+      setSaveError('Cannot save changes to a protected dataset scheme.');
+      return;
+    }
     setIsSaving(true);
     setSaveError(null);
 
@@ -146,8 +154,8 @@ export const SchemeConfiguratorPage: React.FC = () => {
           )}
           <button
             onClick={handleSaveConfiguration}
-            disabled={isSaving}
-            className={`px-5 py-2 bg-[#0b2853] hover:bg-[#134685] text-white font-black text-xs rounded shadow flex items-center gap-1.5 uppercase tracking-wider transition-opacity ${
+            disabled={isSaving || isProtected}
+            className={`px-5 py-2 ${isProtected ? 'bg-slate-400 cursor-not-allowed' : 'bg-[#0b2853] hover:bg-[#134685]'} text-white font-black text-xs rounded shadow flex items-center gap-1.5 uppercase tracking-wider transition-opacity ${
               isSaving ? 'opacity-70 cursor-not-allowed' : ''
             }`}
           >
@@ -156,7 +164,7 @@ export const SchemeConfiguratorPage: React.FC = () => {
             ) : (
               <Save className="w-4 h-4 text-amber-400" />
             )}
-            <span>{isSaving ? 'Saving to Atlas...' : 'Save & Apply Rule Configuration'}</span>
+            <span>{isSaving ? 'Saving to Atlas...' : (isProtected ? 'Protected Scheme' : 'Save & Apply Rule Configuration')}</span>
           </button>
         </div>
       </div>
@@ -183,6 +191,19 @@ export const SchemeConfiguratorPage: React.FC = () => {
         </div>
       </div>
 
+      {isProtected && (
+        <div className="bg-amber-50 border border-amber-200 p-4 rounded flex items-start gap-3">
+          <ShieldCheck className="w-5 h-5 text-amber-700 flex-shrink-0 mt-0.5" />
+          <div>
+            <h4 className="font-bold text-amber-900 text-xs">Official Dataset Scheme (Protected)</h4>
+            <p className="text-amber-800 text-[11px] mt-1">
+              This scheme is part of the original MoTA dataset and cannot be edited or overwritten. 
+              You can view the configuration but saving changes is disabled.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Basic Metadata Configuration Grid */}
       <div className="bg-white p-5 rounded border border-slate-300 shadow-sm space-y-4">
         <h3 className="font-bold text-slate-800 uppercase tracking-wider text-xs border-b border-slate-200 pb-2 flex items-center gap-2">
@@ -195,9 +216,10 @@ export const SchemeConfiguratorPage: React.FC = () => {
             <label className="block font-bold text-slate-700 mb-1">Scheme Name:</label>
             <input
               type="text"
+              disabled={isProtected}
               value={schemeName}
               onChange={(e) => setSchemeName(e.target.value)}
-              className="w-full p-2 bg-slate-50 border border-slate-300 rounded font-semibold"
+              className="w-full p-2 bg-slate-50 border border-slate-300 rounded font-semibold disabled:opacity-60"
             />
           </div>
 
@@ -205,9 +227,10 @@ export const SchemeConfiguratorPage: React.FC = () => {
             <label className="block font-bold text-slate-700 mb-1">Scheme Code:</label>
             <input
               type="text"
+              disabled={isProtected}
               value={schemeCode}
               onChange={(e) => setSchemeCode(e.target.value)}
-              className="w-full p-2 bg-slate-50 border border-slate-300 rounded font-mono font-bold"
+              className="w-full p-2 bg-slate-50 border border-slate-300 rounded font-mono font-bold disabled:opacity-60"
             />
           </div>
 
@@ -216,9 +239,10 @@ export const SchemeConfiguratorPage: React.FC = () => {
             <input
               type="number"
               step="10000"
+              disabled={isProtected}
               value={annualIncomeCap}
               onChange={(e) => setAnnualIncomeCap(Number(e.target.value))}
-              className="w-full p-2 bg-slate-50 border border-slate-300 rounded font-bold text-blue-950"
+              className="w-full p-2 bg-slate-50 border border-slate-300 rounded font-bold text-blue-950 disabled:opacity-60"
             />
           </div>
 
@@ -226,9 +250,10 @@ export const SchemeConfiguratorPage: React.FC = () => {
             <label className="block font-bold text-slate-700 mb-1">Min Academic Marks (%):</label>
             <input
               type="number"
+              disabled={isProtected}
               value={minAcademicPercentage}
               onChange={(e) => setMinAcademicPercentage(Number(e.target.value))}
-              className="w-full p-2 bg-slate-50 border border-slate-300 rounded font-bold"
+              className="w-full p-2 bg-slate-50 border border-slate-300 rounded font-bold disabled:opacity-60"
             />
           </div>
 
@@ -236,9 +261,10 @@ export const SchemeConfiguratorPage: React.FC = () => {
             <label className="block font-bold text-slate-700 mb-1">Application Deadline:</label>
             <input
               type="date"
+              disabled={isProtected}
               value={applicationDeadline}
               onChange={(e) => setApplicationDeadline(e.target.value)}
-              className="w-full p-2 bg-slate-50 border border-slate-300 rounded font-mono"
+              className="w-full p-2 bg-slate-50 border border-slate-300 rounded font-mono disabled:opacity-60"
             />
           </div>
 
@@ -246,8 +272,9 @@ export const SchemeConfiguratorPage: React.FC = () => {
             <label className="block font-bold text-slate-700 mb-1">Portal Application Status:</label>
             <select
               value={isOpen ? 'OPEN' : 'CLOSED'}
+              disabled={isProtected}
               onChange={(e) => setIsOpen(e.target.value === 'OPEN')}
-              className="w-full p-2 bg-slate-50 border border-slate-300 rounded font-bold"
+              className="w-full p-2 bg-slate-50 border border-slate-300 rounded font-bold disabled:opacity-60"
             >
               <option value="OPEN">Online Applications OPEN</option>
               <option value="CLOSED">Online Applications CLOSED</option>
@@ -297,14 +324,16 @@ export const SchemeConfiguratorPage: React.FC = () => {
                 <span className="text-slate-600 italic text-[11px]">
                   "{rule.explanation}"
                 </span>
-                <button
-                  type="button"
-                  onClick={() => handleDeleteRule(rule.id)}
-                  className="p-1 rounded text-rose-600 hover:bg-rose-50"
-                  title="Remove Rule"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+                {!isProtected && (
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteRule(rule.id)}
+                    className="p-1 rounded text-rose-600 hover:bg-rose-50"
+                    title="Remove Rule"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                )}
               </div>
             </div>
           ))}
@@ -374,7 +403,8 @@ export const SchemeConfiguratorPage: React.FC = () => {
             <div className="flex items-end">
               <button
                 type="submit"
-                className="w-full py-2 bg-[#0b2853] hover:bg-[#134685] text-white rounded font-bold flex items-center justify-center gap-1 shadow-sm"
+                disabled={isProtected}
+                className={`w-full py-2 ${isProtected ? 'bg-slate-400 cursor-not-allowed' : 'bg-[#0b2853] hover:bg-[#134685]'} text-white rounded font-bold flex items-center justify-center gap-1 shadow-sm`}
               >
                 <Plus className="w-4 h-4" />
                 <span>Append Rule</span>
