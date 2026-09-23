@@ -14,6 +14,7 @@ from app.routes.documents import router as documents_router
 from app.routes.grievances import router as grievances_router
 from app.routes.admin import router as admin_router
 from app.routes.eligibility import router as eligibility_router
+from app.routes.applicant_profile import router as applicant_profile_router
 
 # Logging setup
 logging.basicConfig(
@@ -107,3 +108,4 @@ app.include_router(documents_router, prefix=settings.API_V1_STR)
 app.include_router(grievances_router, prefix=settings.API_V1_STR)
 app.include_router(admin_router, prefix=settings.API_V1_STR)
 app.include_router(eligibility_router, prefix=settings.API_V1_STR)
+app.include_router(applicant_profile_router, prefix=settings.API_V1_STR)

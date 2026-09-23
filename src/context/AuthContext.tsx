@@ -52,11 +52,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           is_active: profile.is_active,
         });
         setToken(storedToken);
-      } catch (err) {
-        console.warn('Session expired or invalid token:', err);
-        api.logout();
-        setUser(null);
-        setToken(null);
+      } catch (err: any) {
+        const isAuthError = err?.message && (err.message.includes('401') || err.message.includes('Unauthorized') || err.message.includes('credentials'));
+        if (isAuthError) {
+          console.warn('Session expired or invalid token:', err);
+          api.logout();
+          setUser(null);
+          setToken(null);
+        } else {
+          console.warn('Backend server connection pending or unreachable:', err);
+        }
       } finally {
         setIsLoading(false);
       }

@@ -10,6 +10,7 @@ export const StatusTrackerPage: React.FC = () => {
   const [selectedApp, setSelectedApp] = useState(currentApplicantApplication || applications[0] || null);
   const [isResolveModalOpen, setIsResolveModalOpen] = useState<boolean>(false);
   const [replacementFile, setReplacementFile] = useState<string>('Income_Certificate_Tehsildar_FY2024-25_Renewed.pdf');
+  const [replacementFileObj, setReplacementFileObj] = useState<File | null>(null);
 
   useEffect(() => {
     if (!selectedApp && (currentApplicantApplication || applications.length > 0)) {
@@ -34,7 +35,7 @@ export const StatusTrackerPage: React.FC = () => {
   const handleDeficiencyResolved = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedApp) return;
-    resolveApplicationDeficiency(selectedApp.id, replacementFile);
+    resolveApplicationDeficiency(selectedApp.id, replacementFile, replacementFileObj || undefined);
     setIsResolveModalOpen(false);
   };
 
@@ -194,15 +195,33 @@ export const StatusTrackerPage: React.FC = () => {
 
               <div>
                 <label className="block font-bold text-slate-800 mb-1">
-                  Replacement Document Name:
+                  Replacement Document Scan (PDF / JPG / PNG, Max 5MB):
                 </label>
-                <input
-                  type="text"
-                  value={replacementFile}
-                  onChange={(e) => setReplacementFile(e.target.value)}
-                  className="w-full p-2 bg-white border border-slate-300 rounded font-mono"
-                  required
-                />
+                <div className="border border-slate-300 rounded p-2 bg-slate-50 flex items-center justify-between gap-2">
+                  <div className="truncate font-mono text-[11px] text-slate-700">
+                    {replacementFile}
+                  </div>
+                  <label className="cursor-pointer px-3 py-1.5 bg-[#0b2853] text-white rounded font-bold text-xs flex items-center gap-1 hover:bg-[#134685] flex-shrink-0">
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>Choose File</span>
+                    <input
+                      type="file"
+                      accept=".pdf,.jpg,.jpeg,.png"
+                      className="sr-only"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          if (file.size > 5 * 1024 * 1024) {
+                            alert(`File size exceeds 5MB limit (${(file.size / 1024 / 1024).toFixed(1)} MB).`);
+                            return;
+                          }
+                          setReplacementFile(file.name);
+                          setReplacementFileObj(file);
+                        }
+                      }}
+                    />
+                  </label>
+                </div>
               </div>
 
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-200">

@@ -27,7 +27,7 @@ class Settings:
     ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "1440"))
     
     # CORS
-    CORS_ORIGINS_RAW: str = os.getenv("CORS_ORIGINS", "http://localhost:5173").strip()
+    CORS_ORIGINS_RAW: str = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://localhost:5174,http://127.0.0.1:5173,http://127.0.0.1:5174").strip()
     
     @property
     def cors_origins(self) -> List[str]:

@@ -32,4 +32,7 @@ backend/.env
 backend/.venv
 backend/**/__pycache__/
 backend/*.pyc
+backend/storage/**
+!backend/storage/.gitkeep
+scratch/
 

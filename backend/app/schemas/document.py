@@ -19,9 +19,14 @@ class DocumentMetadata(BaseModel):
     file_name: str
     file_size_bytes: int
     content_type: str
-    storage_provider: str = "LOCAL_STORAGE" # Ready for S3 / MinIO
+    storage_provider: str = "LOCAL_STORAGE" # LOCAL_STORAGE or S3_MINIO_READY
     storage_path: str
-    status: str = "UPLOADED" # UPLOADED, OCR_VERIFIED, DEFICIENT
+    storage_key: Optional[str] = None
+    status: str = "UPLOADED" # UPLOADED, PENDING_AI_VERIFICATION, OCR_VERIFIED, DEFICIENT, SUPERSEDED
+    is_active: bool = True
+    superseded_by: Optional[str] = None
+    version: int = 1
+    download_url: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
     class Config:
@@ -34,5 +39,7 @@ class DocumentUploadResponse(BaseModel):
     file_name: str
     file_size_bytes: int
     storage_path: str
-    message: str = "Document metadata registered successfully."
+    storage_key: Optional[str] = None
+    download_url: Optional[str] = None
+    message: str = "Document uploaded and binary securely stored."
     uploaded_at: datetime = Field(default_factory=datetime.utcnow)

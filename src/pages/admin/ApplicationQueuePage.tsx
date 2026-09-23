@@ -15,8 +15,10 @@ import {
   ShieldCheck,
   UserCheck,
   Building,
-  RotateCcw
+  RotateCcw,
+  Download
 } from 'lucide-react';
+import { api } from '../../services/api';
 
 export const ApplicationQueuePage: React.FC = () => {
   const { applications, updateApplicationStatus, currentUser } = useApp();
@@ -276,17 +278,69 @@ export const ApplicationQueuePage: React.FC = () => {
                 </div>
               </div>
 
+              {/* Enclosed Documents Gallery */}
+              {inspectingApp.documents && inspectingApp.documents.length > 0 && (
+                <div className="bg-slate-50 border border-slate-300 rounded p-3 space-y-2">
+                  <div className="font-bold text-slate-800 text-xs uppercase tracking-wider">
+                    Enclosed Dossier Certificates ({inspectingApp.documents.length})
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {inspectingApp.documents.map((doc, idx) => (
+                      <div key={idx} className="bg-white border border-slate-200 rounded p-2.5 flex items-center justify-between gap-2 text-xs">
+                        <div className="truncate">
+                          <div className="font-bold text-slate-900 truncate">{doc.documentName || doc.documentCode}</div>
+                          <div className="text-[10px] text-slate-500 font-mono truncate">{doc.fileName} ({doc.fileSizeKB || 0} KB)</div>
+                        </div>
+                        {doc.id && !doc.id.startsWith('DOC-AI') && (
+                          <button
+                            onClick={async () => {
+                              try {
+                                const blob = await api.downloadDocumentFile(doc.id);
+                                const url = window.URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                a.href = url;
+                                a.download = doc.fileName || 'certificate.pdf';
+                                document.body.appendChild(a);
+                                a.click();
+                                window.URL.revokeObjectURL(url);
+                                document.body.removeChild(a);
+                              } catch (e: any) {
+                                alert(`Could not download file: ${e.message}`);
+                              }
+                            }}
+                            className="px-2 py-1 bg-[#0b2853] hover:bg-[#134685] text-white rounded text-[10px] font-bold flex items-center gap-1 flex-shrink-0"
+                            title="Download citizen uploaded binary"
+                          >
+                            <Download className="w-3 h-3" />
+                            <span>Download</span>
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Section 2: AI OCR Extraction & Side-by-Side Verification */}
               <div>
                 <h4 className="font-bold text-slate-800 uppercase tracking-wider mb-2">
                   1. Document Intelligence & OCR Inspection
                 </h4>
-                <DocumentOcrViewer
-                  documentType="INCOME_CERTIFICATE"
-                  applicantName={inspectingApp.applicant.fullName}
-                  declaredIncome={inspectingApp.annualFamilyIncome}
-                  isDeficientScenario={inspectingApp.hasDeficiency}
-                />
+                {(() => {
+                  const targetDoc = inspectingApp.documents?.find(d => d.documentCode === 'INCOME_CERTIFICATE') || inspectingApp.documents?.[0];
+                  const isLive = Boolean(targetDoc && targetDoc.id && !targetDoc.id.startsWith('DOC-AI'));
+                  return (
+                    <DocumentOcrViewer
+                      documentType="INCOME_CERTIFICATE"
+                      applicantName={inspectingApp.applicant.fullName}
+                      declaredIncome={inspectingApp.annualFamilyIncome}
+                      isDeficientScenario={inspectingApp.hasDeficiency}
+                      documentId={targetDoc?.id}
+                      fileName={targetDoc?.fileName}
+                      isLiveUpload={isLive}
+                    />
+                  );
+                })()}
               </div>
 
               {/* Section 3: Transparent Rule Evaluation Card */}

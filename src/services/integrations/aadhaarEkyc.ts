@@ -31,13 +31,13 @@ export const AadhaarEkycService = {
     return {
       authStatus: 'SUCCESS',
       maskedAadhaar: 'XXXXXXXX' + req.aadhaarNumber.slice(-4),
-      name: 'Sunita Soren',
-      gender: 'FEMALE',
-      dob: '1998-04-12',
+      name: 'Verified Citizen',
+      gender: 'OTHER',
+      dob: '2000-01-01',
       address: {
-        district: 'Dumka',
-        state: 'Jharkhand',
-        pincode: '814101'
+        district: '',
+        state: '',
+        pincode: ''
       }
     };
   }

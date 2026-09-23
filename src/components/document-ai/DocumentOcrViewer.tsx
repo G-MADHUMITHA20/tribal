@@ -1,20 +1,27 @@
 import React, { useState } from 'react';
 import { DocumentVerificationResult } from '../../types/verification';
 import { simulateDocumentOcr } from '../../services/documentAiMock';
-import { FileText, CheckCircle2, AlertTriangle, Eye, ShieldCheck, Cpu } from 'lucide-react';
+import { FileText, CheckCircle2, AlertTriangle, Eye, ShieldCheck, Cpu, Download } from 'lucide-react';
+import { api } from '../../services/api';
 
 interface DocumentOcrViewerProps {
   documentType: 'ST_CERTIFICATE' | 'INCOME_CERTIFICATE' | 'MARKSHEET' | 'BANK_PASSBOOK' | 'ADMISSION_LETTER';
   applicantName: string;
   declaredIncome?: number;
   isDeficientScenario?: boolean;
+  documentId?: string;
+  fileName?: string;
+  isLiveUpload?: boolean;
 }
 
 export const DocumentOcrViewer: React.FC<DocumentOcrViewerProps> = ({
   documentType,
   applicantName,
   declaredIncome,
-  isDeficientScenario = false
+  isDeficientScenario = false,
+  documentId,
+  fileName,
+  isLiveUpload = false
 }) => {
   const result: DocumentVerificationResult = simulateDocumentOcr(
     documentType,
@@ -24,6 +31,27 @@ export const DocumentOcrViewer: React.FC<DocumentOcrViewerProps> = ({
   );
 
   const [activeView, setActiveView] = useState<'FIELDS' | 'OCR_TEXT'>('FIELDS');
+  const [isDownloading, setIsDownloading] = useState<boolean>(false);
+
+  const handleDownloadOriginal = async () => {
+    if (!documentId) return;
+    setIsDownloading(true);
+    try {
+      const blob = await api.downloadDocumentFile(documentId);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName || `${documentType}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err: any) {
+      alert(`Could not download original document binary: ${err.message}`);
+    } finally {
+      setIsDownloading(false);
+    }
+  };
 
   return (
     <div className="bg-white border border-slate-300 rounded shadow-sm overflow-hidden text-xs">
@@ -44,8 +72,26 @@ export const DocumentOcrViewer: React.FC<DocumentOcrViewerProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Download Original Binary Button */}
+          {documentId && (
+            <button
+              onClick={handleDownloadOriginal}
+              disabled={isDownloading}
+              className="px-2.5 py-1 bg-[#0b2853] hover:bg-[#134685] text-white rounded font-bold text-[10px] flex items-center gap-1 shadow-sm"
+              title="Download original file uploaded by citizen"
+            >
+              <Download className="w-3 h-3" />
+              <span>{isDownloading ? 'Downloading...' : 'Original Scan'}</span>
+            </button>
+          )}
+
           {/* Status Badge */}
-          {result.overallDocStatus === 'VERIFIED' ? (
+          {isLiveUpload ? (
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-900 font-bold text-[11px]">
+              <ShieldCheck className="w-3.5 h-3.5" />
+              PENDING AI VERIFICATION
+            </span>
+          ) : result.overallDocStatus === 'VERIFIED' ? (
             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold text-[11px]">
               <CheckCircle2 className="w-3.5 h-3.5" />
               AI VERIFIED (PASS)

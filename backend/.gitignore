@@ -24,3 +24,5 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+storage/**
+!storage/.gitkeep

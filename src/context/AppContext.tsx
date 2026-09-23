@@ -27,8 +27,10 @@ interface AppContextType {
 
   // Schemes (Dynamic Configuration)
   schemes: SchemeConfig[];
-  updateScheme: (updated: SchemeConfig) => void;
-  addScheme: (newScheme: SchemeConfig) => void;
+  isLoadingSchemes: boolean;
+  fetchSchemes: () => Promise<void>;
+  updateScheme: (updated: SchemeConfig) => Promise<void>;
+  addScheme: (newScheme: SchemeConfig) => Promise<void>;
 
   // Applications
   applications: ApplicationRecord[];
@@ -36,9 +38,9 @@ interface AppContextType {
   isLoadingApplications: boolean;
   applicationError: string | null;
   fetchApplications: () => Promise<void>;
-  addApplication: (app: ApplicationRecord) => Promise<void>;
+  addApplication: (app: ApplicationRecord) => Promise<ApplicationRecord>;
   updateApplicationStatus: (appId: string, newStatus: ApplicationRecord['status'], remarks?: string, officerName?: string) => Promise<void>;
-  resolveApplicationDeficiency: (appId: string, updatedDocName: string) => Promise<void>;
+  resolveApplicationDeficiency: (appId: string, updatedDocName: string, file?: File) => Promise<void>;
 
   // Audit Logs
   auditLogs: SystemAuditLog[];
@@ -48,6 +50,72 @@ interface AppContextType {
   grievances: GrievanceRecord[];
   addGrievance: (g: Omit<GrievanceRecord, 'id' | 'submittedDate'>) => Promise<void>;
   updateGrievanceStatus: (id: string, status: GrievanceRecord['status'], remarks?: string) => Promise<void>;
+}
+ 
+function transformBackendScheme(backendScheme: any): SchemeConfig {
+  const fallback = MOTA_SCHEMES.find(
+    (s) => s.id === backendScheme.id || s.code === backendScheme.code
+  );
+
+  return {
+    id: backendScheme.id || backendScheme._id || (fallback?.id ?? 'scheme-custom'),
+    code: backendScheme.code || (fallback?.code ?? 'MOTA-SCH'),
+    name: backendScheme.name || (fallback?.name ?? 'MoTA Scholarship Scheme'),
+    shortName: backendScheme.short_name || backendScheme.shortName || (fallback?.shortName ?? backendScheme.name ?? 'Scheme'),
+    category: backendScheme.category || (fallback?.category ?? 'POST_MATRIC'),
+    tagline: backendScheme.tagline || (fallback?.tagline ?? ''),
+    description: backendScheme.description || (fallback?.description ?? ''),
+    portalCategory: backendScheme.portal_category || backendScheme.portalCategory || (fallback?.portalCategory ?? 'Centrally Sponsored'),
+    isOpen: backendScheme.is_open !== undefined ? Boolean(backendScheme.is_open) : (backendScheme.isOpen !== undefined ? Boolean(backendScheme.isOpen) : (fallback?.isOpen ?? true)),
+    academicYear: backendScheme.academic_year || backendScheme.academicYear || (fallback?.academicYear ?? '2025-2026'),
+    applicationDeadline: backendScheme.application_deadline || backendScheme.applicationDeadline || (fallback?.applicationDeadline ?? '2025-11-30'),
+    targetCommunity: backendScheme.target_community || backendScheme.targetCommunity || (fallback?.targetCommunity ?? 'Scheduled Tribes (ST)'),
+    annualIncomeCap: Number(backendScheme.annual_income_cap !== undefined ? backendScheme.annual_income_cap : (backendScheme.annualIncomeCap ?? fallback?.annualIncomeCap ?? 0)),
+    minAge: backendScheme.min_age ?? backendScheme.minAge ?? fallback?.minAge,
+    maxAge: backendScheme.max_age ?? backendScheme.maxAge ?? fallback?.maxAge,
+    minAcademicPercentage: backendScheme.min_academic_percentage !== undefined ? Number(backendScheme.min_academic_percentage) : (backendScheme.minAcademicPercentage ?? fallback?.minAcademicPercentage ?? 40),
+    educationLevels: backendScheme.education_levels || backendScheme.educationLevels || (fallback?.educationLevels ?? ['UNDERGRADUATE', 'POSTGRADUATE']),
+    eligibilitySummary: backendScheme.eligibility_summary || backendScheme.eligibilitySummary || (fallback?.eligibilitySummary ?? []),
+    eligibilityRules: backendScheme.eligibility_rules || backendScheme.eligibilityRules || (fallback?.eligibilityRules ?? []),
+    requiredDocuments: backendScheme.required_documents || backendScheme.requiredDocuments || (fallback?.requiredDocuments ?? []),
+    benefits: backendScheme.benefits || backendScheme.benefits || (fallback?.benefits ?? []),
+    selectionCriteria: backendScheme.selection_criteria || backendScheme.selectionCriteria || (fallback?.selectionCriteria ?? {
+      method: 'MERIT_ONLY',
+      meritCalculation: 'Merit list based on qualifying examination percentage',
+      totalSlotsPerYear: 1000
+    }),
+    workflowStages: backendScheme.workflow_stages || backendScheme.workflowStages || (fallback?.workflowStages ?? []),
+    guidelinePdfUrl: backendScheme.guideline_pdf_url || backendScheme.guidelinePdfUrl || (fallback?.guidelinePdfUrl ?? '#'),
+    faqItems: backendScheme.faq_items || backendScheme.faqItems || (fallback?.faqItems ?? []),
+    nodalContact: backendScheme.nodal_contact || backendScheme.nodalContact || (fallback?.nodalContact ?? {
+      officer: 'Nodal Officer (Scholarships)',
+      designation: 'Under Secretary',
+      email: 'scholarship-tribal@nic.in',
+      phone: '011-23388482',
+      address: 'Ministry of Tribal Affairs, Shastri Bhawan, New Delhi'
+    })
+  };
+}
+
+function toBackendSchemePayload(scheme: SchemeConfig): any {
+  return {
+    name: scheme.name,
+    short_name: scheme.shortName,
+    category: scheme.category,
+    tagline: scheme.tagline,
+    description: scheme.description,
+    portal_category: scheme.portalCategory,
+    is_open: scheme.isOpen,
+    academic_year: scheme.academicYear,
+    application_deadline: scheme.applicationDeadline,
+    target_community: scheme.targetCommunity,
+    annual_income_cap: Number(scheme.annualIncomeCap),
+    min_academic_percentage: scheme.minAcademicPercentage !== undefined ? Number(scheme.minAcademicPercentage) : null,
+    eligibility_summary: scheme.eligibilitySummary,
+    eligibility_rules: scheme.eligibilityRules,
+    required_documents: scheme.requiredDocuments,
+    benefits: scheme.benefits
+  };
 }
 
 function transformBackendApplication(app: any): ApplicationRecord {
@@ -62,42 +130,42 @@ function transformBackendApplication(app: any): ApplicationRecord {
     status: (app.status || 'SUBMITTED') as ApplicationStatus,
     applicant: {
       id: app.user_id,
-      fullName: app.personal_details?.full_name || 'Beneficiary Applicant',
+      fullName: app.personal_details?.full_name || '',
       fatherOrHusbandName: app.personal_details?.father_or_husband_name || '',
-      gender: app.personal_details?.gender || 'FEMALE',
-      dob: app.personal_details?.dob || '2000-01-01',
-      aadhaarNumberMasked: app.personal_details?.aadhaar_masked || 'XXXX-XXXX-0000',
+      gender: app.personal_details?.gender || 'OTHER',
+      dob: app.personal_details?.dob || '',
+      aadhaarNumberMasked: app.personal_details?.aadhaar_masked || '',
       category: (app.personal_details?.category || 'ST') as any,
-      tribeCommunity: app.personal_details?.tribe_community || 'Scheduled Tribe',
+      tribeCommunity: app.personal_details?.tribe_community || '',
       mobile: app.personal_details?.mobile || '',
       email: app.personal_details?.email || '',
-      state: app.personal_details?.state || 'Jharkhand',
-      district: app.personal_details?.district || 'Ranchi',
-      pincode: app.personal_details?.pincode || '834001',
+      state: app.personal_details?.state || '',
+      district: app.personal_details?.district || '',
+      pincode: app.personal_details?.pincode || '',
       disabilityStatus: 'NONE',
     },
     academic: {
-      currentCourse: app.academic_details?.current_course || 'Higher Education',
-      institutionName: app.academic_details?.institution_name || 'Institution of Eminence',
-      institutionState: app.academic_details?.institution_state || 'Delhi',
-      aisheCode: app.academic_details?.aishe_code || 'U-0001',
-      rollNumber: app.academic_details?.roll_number || 'ST/2026/01',
-      yearOfStudy: app.academic_details?.year_of_study || '1st Year',
-      previousExamName: app.academic_details?.previous_exam_name || 'Qualifying Exam',
-      previousExamPercentage: app.academic_details?.previous_exam_percentage || 80,
-      passingYear: app.academic_details?.passing_year || '2024',
-      boardOrUniversity: app.academic_details?.board_or_university || 'State University',
+      currentCourse: app.academic_details?.current_course || '',
+      institutionName: app.academic_details?.institution_name || '',
+      institutionState: app.academic_details?.institution_state || '',
+      aisheCode: app.academic_details?.aishe_code || '',
+      rollNumber: app.academic_details?.roll_number || '',
+      yearOfStudy: app.academic_details?.year_of_study || '',
+      previousExamName: app.academic_details?.previous_exam_name || '',
+      previousExamPercentage: app.academic_details?.previous_exam_percentage || 0,
+      passingYear: app.academic_details?.passing_year || '',
+      boardOrUniversity: app.academic_details?.board_or_university || '',
     },
     bank: {
       accountHolderName: app.financial_details?.account_holder_name || app.personal_details?.full_name || '',
-      bankName: app.financial_details?.bank_name || 'State Bank of India',
-      accountNumberMasked: app.financial_details?.account_number_masked || 'XXXXXX1234',
-      ifscCode: app.financial_details?.ifsc_code || 'SBIN0001234',
-      branchName: app.financial_details?.branch_name || 'Main Branch',
+      bankName: app.financial_details?.bank_name || '',
+      accountNumberMasked: app.financial_details?.account_number_masked || '',
+      ifscCode: app.financial_details?.ifsc_code || '',
+      branchName: app.financial_details?.branch_name || '',
       isAadhaarSeeded: app.financial_details?.is_aadhaar_seeded ?? true,
       dbtVerifiedDate: '2026-01-10',
     },
-    annualFamilyIncome: app.financial_details?.annual_family_income || 150000,
+    annualFamilyIncome: app.financial_details?.annual_family_income || 0,
     documents: (app.documents || []).map((d: any, idx: number) => ({
       id: d.id || `DOC-${idx}`,
       documentCode: d.document_code || 'DOC',
@@ -158,11 +226,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [fontSizeMultiplier, setFontSizeMultiplier] = useState<number>(1);
   const [highContrast, setHighContrast] = useState<boolean>(false);
   const [schemes, setSchemes] = useState<SchemeConfig[]>(MOTA_SCHEMES);
+  const [isLoadingSchemes, setIsLoadingSchemes] = useState<boolean>(false);
   const [applications, setApplications] = useState<ApplicationRecord[]>([]);
   const [isLoadingApplications, setIsLoadingApplications] = useState<boolean>(false);
   const [applicationError, setApplicationError] = useState<string | null>(null);
   const [auditLogs, setAuditLogs] = useState<SystemAuditLog[]>(INITIAL_AUDIT_LOGS);
   const [grievances, setGrievances] = useState<GrievanceRecord[]>([]);
+
+  // Fetch schemes from backend MongoDB Atlas
+  const fetchSchemes = async () => {
+    setIsLoadingSchemes(true);
+    try {
+      const backendSchemes = await api.getSchemes();
+      if (backendSchemes && backendSchemes.length > 0) {
+        setSchemes(backendSchemes.map(transformBackendScheme));
+      }
+    } catch (err) {
+      console.warn('Backend schemes endpoint unavailable, maintaining fallback seed data:', err);
+    } finally {
+      setIsLoadingSchemes(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchSchemes();
+  }, []);
 
   // Apply font size scale
   useEffect(() => {
@@ -295,8 +383,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setHighContrast((prev) => !prev);
   };
 
-  const updateScheme = (updated: SchemeConfig) => {
+  const updateScheme = async (updated: SchemeConfig) => {
+    // 1. Optimistic update
     setSchemes((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
+
+    // 2. Persist to MongoDB Atlas backend
+    try {
+      const payload = toBackendSchemePayload(updated);
+      const res = await api.updateScheme(updated.id, payload);
+      const transformed = transformBackendScheme(res);
+      setSchemes((prev) => prev.map((s) => (s.id === transformed.id ? transformed : s)));
+    } catch (err: any) {
+      console.error('Failed to persist scheme update to server:', err);
+      throw err;
+    }
+
     addAuditLog({
       actor: currentUser.name,
       role: currentUser.role,
@@ -310,14 +411,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   };
 
-  const addScheme = (newScheme: SchemeConfig) => {
+  const addScheme = async (newScheme: SchemeConfig) => {
     setSchemes((prev) => [...prev, newScheme]);
+    try {
+      const payload = {
+        id: newScheme.id,
+        code: newScheme.code,
+        ...toBackendSchemePayload(newScheme)
+      };
+      const res = await api.createScheme(payload);
+      const transformed = transformBackendScheme(res);
+      setSchemes((prev) => [...prev.filter((s) => s.id !== newScheme.id), transformed]);
+    } catch (err: any) {
+      console.error('Failed to persist new scheme to server:', err);
+      throw err;
+    }
   };
 
   const addApplication = async (app: ApplicationRecord) => {
     try {
       const payload = {
-        scheme_id: app.schemeCode,
+        scheme_id: app.schemeCode || app.schemeId,
         personal_details: {
           full_name: app.applicant.fullName,
           father_or_husband_name: app.applicant.fatherOrHusbandName,
@@ -368,24 +482,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const created = await api.createApplication(payload);
       const transformed = transformBackendApplication(created);
       setApplications((prev) => [transformed, ...prev]);
+      addAuditLog({
+        actor: app.applicant.fullName,
+        role: 'APPLICANT',
+        action: 'New Application Submitted',
+        applicationId: transformed.id,
+        schemeCode: app.schemeCode,
+        previousStatus: 'DRAFT',
+        newStatus: transformed.status,
+        remarks: `Applied for ${app.schemeName}`,
+        reason: `Applied for ${app.schemeName}`,
+        ipAddress: '164.100.24.112'
+      });
+      return transformed;
     } catch (err: any) {
       console.error('Failed to create application on server:', err);
       // Still update locally if offline
       setApplications((prev) => [app, ...prev]);
+      addAuditLog({
+        actor: app.applicant.fullName,
+        role: 'APPLICANT',
+        action: 'New Application Submitted',
+        applicationId: app.id,
+        schemeCode: app.schemeCode,
+        previousStatus: 'DRAFT',
+        newStatus: app.status,
+        remarks: `Applied for ${app.schemeName}`,
+        reason: `Applied for ${app.schemeName}`,
+        ipAddress: '164.100.24.112'
+      });
+      return app;
     }
-
-    addAuditLog({
-      actor: app.applicant.fullName,
-      role: 'APPLICANT',
-      action: 'New Application Submitted',
-      applicationId: app.id,
-      schemeCode: app.schemeCode,
-      previousStatus: 'DRAFT',
-      newStatus: app.status,
-      remarks: `Applied for ${app.schemeName}`,
-      reason: `Applied for ${app.schemeName}`,
-      ipAddress: '164.100.24.112'
-    });
   };
 
   const updateApplicationStatus = async (
@@ -420,11 +547,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
   };
 
-  const resolveApplicationDeficiency = async (appId: string, updatedDocName: string) => {
+  const resolveApplicationDeficiency = async (appId: string, updatedDocName: string, file?: File) => {
     try {
-      await api.updateApplication(appId, {
-        status: 'SUBMITTED',
-      });
+      const targetApp = applications.find((a) => a.id === appId);
+      const deficientDoc = targetApp?.documents.find((d) => d.status === 'DEFICIENT') || targetApp?.documents[0];
+
+      if (file && deficientDoc && deficientDoc.id && !deficientDoc.id.startsWith('DOC-AI')) {
+        // Attempt backend document replacement
+        await api.replaceDocument(deficientDoc.id, file);
+      } else {
+        await api.updateApplication(appId, {
+          status: 'SUBMITTED',
+        });
+      }
     } catch (err) {
       console.warn('Backend resolveApplicationDeficiency failed:', err);
     }
@@ -528,6 +663,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         highContrast,
         toggleHighContrast,
         schemes,
+        isLoadingSchemes,
+        fetchSchemes,
         updateScheme,
         addScheme,
         applications,

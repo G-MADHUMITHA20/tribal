@@ -41,6 +41,8 @@ export const SchemeConfiguratorPage: React.FC = () => {
   const [newRuleExplanation, setNewRuleExplanation] = useState<string>('Family income must not exceed threshold.');
 
   const [saveSuccess, setSaveSuccess] = useState<boolean>(false);
+  const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   // Synchronize fields when selecting another scheme
   const handleSelectScheme = (id: string) => {
@@ -55,6 +57,7 @@ export const SchemeConfiguratorPage: React.FC = () => {
       setApplicationDeadline(s.applicationDeadline);
       setIsOpen(s.isOpen);
       setRules(s.eligibilityRules);
+      setSaveError(null);
     }
   };
 
@@ -78,8 +81,10 @@ export const SchemeConfiguratorPage: React.FC = () => {
     setRules((prev) => prev.filter((r) => r.id !== id));
   };
 
-  const handleSaveConfiguration = (e: React.FormEvent) => {
+  const handleSaveConfiguration = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsSaving(true);
+    setSaveError(null);
 
     const updatedConfig: SchemeConfig = {
       ...scheme,
@@ -93,9 +98,15 @@ export const SchemeConfiguratorPage: React.FC = () => {
       eligibilityRules: rules
     };
 
-    updateScheme(updatedConfig);
-    setSaveSuccess(true);
-    setTimeout(() => setSaveSuccess(false), 3000);
+    try {
+      await updateScheme(updatedConfig);
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3500);
+    } catch (err: any) {
+      setSaveError(err.message || 'Failed to persist scheme configuration to database.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -120,19 +131,32 @@ export const SchemeConfiguratorPage: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {saveSuccess && (
             <span className="text-emerald-700 font-bold bg-emerald-50 px-3 py-1.5 rounded border border-emerald-300 flex items-center gap-1.5 animate-pulse">
               <CheckCircle2 className="w-4 h-4" />
-              Rules Committed & Propagated!
+              Rules Committed to MongoDB Atlas!
+            </span>
+          )}
+          {saveError && (
+            <span className="text-rose-700 font-bold bg-rose-50 px-3 py-1.5 rounded border border-rose-300 flex items-center gap-1.5">
+              <AlertCircle className="w-4 h-4" />
+              {saveError}
             </span>
           )}
           <button
             onClick={handleSaveConfiguration}
-            className="px-5 py-2 bg-[#0b2853] hover:bg-[#134685] text-white font-black text-xs rounded shadow flex items-center gap-1.5 uppercase tracking-wider"
+            disabled={isSaving}
+            className={`px-5 py-2 bg-[#0b2853] hover:bg-[#134685] text-white font-black text-xs rounded shadow flex items-center gap-1.5 uppercase tracking-wider transition-opacity ${
+              isSaving ? 'opacity-70 cursor-not-allowed' : ''
+            }`}
           >
-            <Save className="w-4 h-4 text-amber-400" />
-            <span>Save & Apply Rule Configuration</span>
+            {isSaving ? (
+              <div className="w-4 h-4 border-2 border-white border-t-amber-400 rounded-full animate-spin" />
+            ) : (
+              <Save className="w-4 h-4 text-amber-400" />
+            )}
+            <span>{isSaving ? 'Saving to Atlas...' : 'Save & Apply Rule Configuration'}</span>
           </button>
         </div>
       </div>

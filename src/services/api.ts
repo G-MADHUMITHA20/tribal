@@ -52,7 +52,9 @@ class ApiClient {
       } catch (_) {
         // Fallback to generic message
       }
-      throw new Error(errorMessage);
+      const error: any = new Error(errorMessage);
+      error.status = response.status;
+      throw error;
     }
 
     return response.json() as Promise<T>;
@@ -94,6 +96,46 @@ class ApiClient {
     return this.request<any>('/auth/me');
   }
 
+  // Applicant Profile & Identity
+  public async getApplicantProfile() {
+    try {
+      return await this.request<any>('/applicant/profile');
+    } catch (err: any) {
+      // 404 means the authenticated citizen has not created their applicant profile yet
+      if (err?.status === 404 || err?.message?.includes('404')) {
+        return null;
+      }
+      throw err;
+    }
+  }
+
+  public async createApplicantProfile(profile: any) {
+    return this.request<any>('/applicant/profile', {
+      method: 'POST',
+      body: JSON.stringify(profile),
+    });
+  }
+
+  public async updateApplicantProfile(profile: any) {
+    return this.request<any>('/applicant/profile', {
+      method: 'PUT',
+      body: JSON.stringify(profile),
+    });
+  }
+
+  public async getReusableDocuments() {
+    try {
+      const res = await this.request<any[]>('/applicant/reusable-documents');
+      return Array.isArray(res) ? res : [];
+    } catch (err: any) {
+      if (err?.status === 404 || err?.message?.includes('404')) {
+        return [];
+      }
+      console.warn('Reusable documents query returned error:', err);
+      return [];
+    }
+  }
+
   public logout() {
     this.setToken(null);
   }
@@ -105,6 +147,20 @@ class ApiClient {
 
   public async getSchemeById(id: string) {
     return this.request<any>(`/schemes/${id}`);
+  }
+
+  public async createScheme(payload: any) {
+    return this.request<any>('/schemes', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  public async updateScheme(id: string, payload: any) {
+    return this.request<any>(`/schemes/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
   }
 
   // Applications
@@ -150,14 +206,74 @@ class ApiClient {
     });
 
     if (!response.ok) {
-      throw new Error(`Document upload failed: ${response.statusText}`);
+      let errorMsg = `Document upload failed: ${response.statusText}`;
+      try {
+        const errJson = await response.json();
+        if (errJson.detail) errorMsg = errJson.detail;
+      } catch (_) {}
+      throw new Error(errorMsg);
+    }
+
+    return response.json();
+  }
+
+  public async replaceDocument(documentId: string, file: File) {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const token = this.getToken();
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const response = await fetch(`${API_BASE_URL}/documents/${encodeURIComponent(documentId)}/replace`, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+
+    if (!response.ok) {
+      let errorMsg = `Document replacement failed: ${response.statusText}`;
+      try {
+        const errJson = await response.json();
+        if (errJson.detail) errorMsg = errJson.detail;
+      } catch (_) {}
+      throw new Error(errorMsg);
     }
 
     return response.json();
   }
 
   public async getDocumentsByApplication(applicationId: string) {
-    return this.request<any[]>(`/documents/application/${applicationId}`);
+    return this.request<any[]>(`/documents/application/${encodeURIComponent(applicationId)}`);
+  }
+
+  public async getDocumentMetadata(documentId: string) {
+    return this.request<any>(`/documents/${encodeURIComponent(documentId)}`);
+  }
+
+  public async downloadDocumentFile(documentId: string): Promise<Blob> {
+    const token = this.getToken();
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const response = await fetch(`${API_BASE_URL}/documents/${encodeURIComponent(documentId)}/file`, {
+      headers,
+    });
+
+    if (!response.ok) {
+      let errorMsg = `File download failed: ${response.statusText}`;
+      try {
+        const errJson = await response.json();
+        if (errJson.detail) errorMsg = errJson.detail;
+      } catch (_) {}
+      throw new Error(errorMsg);
+    }
+
+    return response.blob();
   }
 
   // Grievances

@@ -54,3 +54,44 @@ class SchemeResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+class SchemeCreate(BaseModel):
+    id: Optional[str] = None
+    code: str
+    name: str
+    short_name: str
+    category: SchemeCategory
+    tagline: str
+    description: str
+    portal_category: Optional[str] = "MoTA Direct Portal"
+    is_open: bool = True
+    academic_year: Optional[str] = "2025-26"
+    application_deadline: str
+    target_community: str = "Scheduled Tribes (ST)"
+    annual_income_cap: int = 0
+    min_academic_percentage: Optional[float] = None
+    eligibility_summary: Optional[List[str]] = []
+    eligibility_rules: Optional[List[EligibilityCriterion]] = []
+    required_documents: Optional[List[RequiredDocument]] = []
+    benefits: Optional[List[BenefitTier]] = []
+    is_demo_data: bool = False
+
+class SchemeUpdate(BaseModel):
+    name: Optional[str] = None
+    short_name: Optional[str] = None
+    category: Optional[SchemeCategory] = None
+    tagline: Optional[str] = None
+    description: Optional[str] = None
+    portal_category: Optional[str] = None
+    is_open: Optional[bool] = None
+    academic_year: Optional[str] = None
+    application_deadline: Optional[str] = None
+    target_community: Optional[str] = None
+    annual_income_cap: Optional[int] = None
+    min_academic_percentage: Optional[float] = None
+    eligibility_summary: Optional[List[str]] = None
+    eligibility_rules: Optional[List[EligibilityCriterion]] = None
+    required_documents: Optional[List[RequiredDocument]] = None
+    benefits: Optional[List[BenefitTier]] = None
+    is_demo_data: Optional[bool] = None
+
