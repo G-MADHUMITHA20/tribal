@@ -47,10 +47,13 @@ interface AppContextType {
   // Applications
   applications: ApplicationRecord[];
   currentApplicantApplication: ApplicationRecord | undefined;
+  draftApplications: ApplicationRecord[];
+  activeDraft: ApplicationRecord | undefined;
   isLoadingApplications: boolean;
   applicationError: string | null;
   fetchApplications: () => Promise<void>;
   addApplication: (app: ApplicationRecord) => Promise<ApplicationRecord>;
+  saveDraft: (draftData: any) => Promise<ApplicationRecord>;
   updateApplicationStatus: (appId: string, newStatus: ApplicationRecord['status'], remarks?: string, officerName?: string) => Promise<void>;
   resolveApplicationDeficiency: (appId: string, updatedDocName: string, file?: File) => Promise<void>;
 
@@ -145,6 +148,7 @@ function transformBackendApplication(app: any): ApplicationRecord {
     submissionDate: app.created_at ? new Date(app.created_at).toISOString().substring(0, 10) : new Date().toISOString().substring(0, 10),
     lastUpdated: app.updated_at ? new Date(app.updated_at).toISOString().substring(0, 10) : new Date().toISOString().substring(0, 10),
     currentStageIndex: 1,
+    currentStep: app.current_step || 1,
     status: (app.status || 'SUBMITTED') as ApplicationStatus,
     applicant: {
       id: app.user_id,
@@ -502,11 +506,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         status: 'SUBMITTED',
       };
 
-      const created = await api.createApplication(payload);
-      const transformed = transformBackendApplication(created);
-      setApplications((prev) => [transformed, ...prev]);
+      const isExistingDraft = Boolean(app.id && applications.some((a) => a.id === app.id && a.status === 'DRAFT'));
+      let transformed: ApplicationRecord;
 
-      // Log application started
+      if (isExistingDraft) {
+        const updatePayload = {
+          current_step: 8,
+          personal_details: payload.personal_details,
+          academic_details: payload.academic_details,
+          financial_details: payload.financial_details,
+          documents: payload.documents,
+          status: 'SUBMITTED',
+        };
+        const updated = await api.updateApplication(app.id, updatePayload);
+        transformed = transformBackendApplication(updated);
+        setApplications((prev) => prev.map((a) => (a.id === transformed.id ? transformed : a)));
+      } else {
+        const created = await api.createApplication(payload);
+        transformed = transformBackendApplication(created);
+        setApplications((prev) => [transformed, ...prev]);
+      }
       addAuditLog({
         actor: app.applicant.fullName,
         role: 'APPLICANT',
@@ -527,7 +546,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         action: 'Application Submitted',
         applicationId: transformed.id,
         schemeCode: app.schemeCode,
-        previousStatus: 'DRAFT',
+        previousStatus: isExistingDraft ? 'DRAFT' : 'DRAFT',
         newStatus: transformed.status,
         remarks: `Applied for ${app.schemeName}`,
         reason: `Applied for ${app.schemeName}`,
@@ -535,7 +554,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
       return transformed;
     } catch (err: any) {
-      console.error('Failed to create application on server:', err);
+      console.error('Failed to create/submit application on server:', err);
       // Still update locally if offline
       setApplications((prev) => [app, ...prev]);
 
@@ -565,6 +584,40 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         ipAddress: '164.100.24.112'
       });
       return app;
+    }
+  };
+
+  const saveDraft = async (draftData: any): Promise<ApplicationRecord> => {
+    try {
+      const res = await api.saveApplicationDraft(draftData);
+      const transformed = transformBackendApplication(res);
+      setApplications((prev) => {
+        const existingIdx = prev.findIndex((a) => a.id === transformed.id);
+        if (existingIdx >= 0) {
+          const next = [...prev];
+          next[existingIdx] = transformed;
+          return next;
+        }
+        return [transformed, ...prev];
+      });
+
+      addAuditLog({
+        actor: transformed.applicant.fullName || currentUser.name || 'Citizen Applicant',
+        role: 'APPLICANT',
+        action: 'Application Draft Saved',
+        applicationId: transformed.id,
+        schemeCode: transformed.schemeCode,
+        previousStatus: 'DRAFT',
+        newStatus: 'DRAFT',
+        remarks: `Draft saved at Step ${transformed.currentStep || 1}`,
+        reason: `Draft saved at Step ${transformed.currentStep || 1}`,
+        ipAddress: '10.14.88.22'
+      });
+
+      return transformed;
+    } catch (err: any) {
+      console.error('Failed to save application draft to MongoDB Atlas:', err);
+      throw err;
     }
   };
 
@@ -733,16 +786,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // STRICT APPLICANT DATA ISOLATION:
-  // Only find an application that explicitly belongs to the authenticated user.
-  // NEVER fall back to applications[0] or another applicant's record!
-  const currentApplicantApplication = authUser
-    ? applications.find(
-      (a) =>
-        a.applicant.id === authUser.id ||
-        (authUser.email && a.applicant.email.toLowerCase() === authUser.email.toLowerCase()) ||
-        (authUser.name && a.applicant.fullName.toLowerCase() === authUser.name.toLowerCase())
-    )
-    : undefined;
+  // Only find applications that explicitly belong to the authenticated user.
+  const userApplications = authUser
+    ? applications.filter(
+        (a) =>
+          a.applicant.id === authUser.id ||
+          (authUser.email && a.applicant.email.toLowerCase() === authUser.email.toLowerCase()) ||
+          (authUser.name && a.applicant.fullName.toLowerCase() === authUser.name.toLowerCase())
+      )
+    : [];
+
+  const draftApplications = userApplications.filter((a) => a.status === 'DRAFT');
+  const activeDraft = draftApplications[0];
+
+  // Active submitted application (excluding DRAFT, or fallback to first)
+  const currentApplicantApplication = userApplications.find((a) => a.status !== 'DRAFT') || userApplications[0];
 
   return (
     <AppContext.Provider
@@ -764,10 +822,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addScheme,
         applications,
         currentApplicantApplication,
+        draftApplications,
+        activeDraft,
         isLoadingApplications,
         applicationError,
         fetchApplications,
         addApplication,
+        saveDraft,
         updateApplicationStatus,
         resolveApplicationDeficiency,
         auditLogs,

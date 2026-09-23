@@ -55,6 +55,20 @@ class PersonalDetails(BaseModel):
     district: str
     pincode: str
 
+class PersonalDetailsDraft(BaseModel):
+    full_name: Optional[str] = ""
+    father_or_husband_name: Optional[str] = None
+    gender: Optional[str] = "FEMALE"
+    dob: Optional[str] = ""
+    aadhaar_masked: Optional[str] = ""
+    category: Optional[str] = "ST"
+    tribe_community: Optional[str] = ""
+    mobile: Optional[str] = ""
+    email: Optional[str] = ""
+    state: Optional[str] = ""
+    district: Optional[str] = ""
+    pincode: Optional[str] = ""
+
 class AcademicDetails(BaseModel):
     current_course: str
     institution_name: str
@@ -67,6 +81,18 @@ class AcademicDetails(BaseModel):
     passing_year: str
     board_or_university: str
 
+class AcademicDetailsDraft(BaseModel):
+    current_course: Optional[str] = ""
+    institution_name: Optional[str] = ""
+    institution_state: Optional[str] = None
+    aishe_code: Optional[str] = None
+    roll_number: Optional[str] = None
+    year_of_study: Optional[str] = None
+    previous_exam_name: Optional[str] = ""
+    previous_exam_percentage: Optional[float] = 0.0
+    passing_year: Optional[str] = ""
+    board_or_university: Optional[str] = ""
+
 class FinancialDetails(BaseModel):
     annual_family_income: int
     bank_name: str
@@ -75,6 +101,15 @@ class FinancialDetails(BaseModel):
     ifsc_code: str
     branch_name: Optional[str] = None
     is_aadhaar_seeded: bool = True
+
+class FinancialDetailsDraft(BaseModel):
+    annual_family_income: Optional[int] = 0
+    bank_name: Optional[str] = ""
+    account_holder_name: Optional[str] = ""
+    account_number_masked: Optional[str] = ""
+    ifsc_code: Optional[str] = ""
+    branch_name: Optional[str] = None
+    is_aadhaar_seeded: Optional[bool] = True
 
 class ApplicationDocumentItem(BaseModel):
     id: str
@@ -93,11 +128,22 @@ class ApplicationCreate(BaseModel):
     financial_details: FinancialDetails
     documents: Optional[List[ApplicationDocumentItem]] = []
     status: ApplicationStatus = ApplicationStatus.SUBMITTED
+    current_step: Optional[int] = 1
+
+class ApplicationDraftSave(BaseModel):
+    application_id: Optional[str] = None
+    scheme_id: str
+    current_step: int = 1
+    personal_details: Optional[PersonalDetailsDraft] = None
+    academic_details: Optional[AcademicDetailsDraft] = None
+    financial_details: Optional[FinancialDetailsDraft] = None
+    documents: Optional[List[ApplicationDocumentItem]] = []
 
 class ApplicationUpdate(BaseModel):
-    personal_details: Optional[PersonalDetails] = None
-    academic_details: Optional[AcademicDetails] = None
-    financial_details: Optional[FinancialDetails] = None
+    current_step: Optional[int] = None
+    personal_details: Optional[PersonalDetailsDraft] = None
+    academic_details: Optional[AcademicDetailsDraft] = None
+    financial_details: Optional[FinancialDetailsDraft] = None
     documents: Optional[List[ApplicationDocumentItem]] = None
     status: Optional[ApplicationStatus] = None
 
@@ -107,9 +153,10 @@ class ApplicationResponse(BaseModel):
     scheme_id: str
     scheme_name: Optional[str] = None
     status: ApplicationStatus
-    personal_details: PersonalDetails
-    academic_details: AcademicDetails
-    financial_details: FinancialDetails
+    current_step: Optional[int] = 1
+    personal_details: Optional[PersonalDetailsDraft] = Field(default_factory=PersonalDetailsDraft)
+    academic_details: Optional[AcademicDetailsDraft] = Field(default_factory=AcademicDetailsDraft)
+    financial_details: Optional[FinancialDetailsDraft] = Field(default_factory=FinancialDetailsDraft)
     documents: List[ApplicationDocumentItem] = []
     has_deficiency: bool = False
     deficiency_notes: Optional[str] = None

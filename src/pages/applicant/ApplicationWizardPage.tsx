@@ -32,16 +32,20 @@ import { api } from '../../services/api';
 export const ApplicationWizardPage: React.FC = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { schemes, addApplication, currentUser, applications } = useApp();
+  const { schemes, addApplication, saveDraft, draftApplications, currentUser, applications } = useApp();
 
-  const initialSchemeId = searchParams.get('scheme') || schemes[3].id; // default National Fellowship
+  const initialSchemeId = searchParams.get('scheme') || (schemes[3] ? schemes[3].id : schemes[0]?.id || 'MOTA-NFST-01');
   const [selectedSchemeId, setSelectedSchemeId] = useState<string>(initialSchemeId);
 
-  const selectedScheme = schemes.find((s) => s.id === selectedSchemeId) || schemes[0];
+  const selectedScheme = schemes.find((s) => s.id === selectedSchemeId || s.code === selectedSchemeId) || schemes[0];
 
   // Wizard current step: 1 to 8
   const [currentStep, setCurrentStep] = useState<number>(1);
+  const [draftAppId, setDraftAppId] = useState<string | null>(searchParams.get('draftId') || null);
   const [isSavedDraft, setIsSavedDraft] = useState<boolean>(false);
+  const [isSavingDraft, setIsSavingDraft] = useState<boolean>(false);
+  const [draftSaveMsg, setDraftSaveMsg] = useState<string>('');
+  const [restoredFromDraft, setRestoredFromDraft] = useState<boolean>(false);
   const [isPullingDigiLocker, setIsPullingDigiLocker] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [isSubmittedSuccess, setIsSubmittedSuccess] = useState<boolean>(false);
@@ -92,7 +96,7 @@ export const ApplicationWizardPage: React.FC = () => {
   const [branchName, setBranchName] = useState<string>('');
   const [isAadhaarSeeded, setIsAadhaarSeeded] = useState<boolean>(true);
 
-  // STEP 5: Documents
+  // STEP 5: Documents & Real OCR Verification State
   const [stCertFile, setStCertFile] = useState<string>('');
   const [stCertFileObj, setStCertFileObj] = useState<File | null>(null);
   const [incCertFile, setIncCertFile] = useState<string>('');
@@ -103,7 +107,31 @@ export const ApplicationWizardPage: React.FC = () => {
   const [admissionFileObj, setAdmissionFileObj] = useState<File | null>(null);
   const [isDigiLockerLinked, setIsDigiLockerLinked] = useState<boolean>(false);
 
-  const handleSelectDocument = (
+  // Real OCR & Document Verification State per slot
+  const [ocrStates, setOcrStates] = useState<Record<'ST' | 'INC' | 'MARK' | 'ADM', {
+    status: 'IDLE' | 'READING' | 'CHECKING' | 'TYPE_MATCH' | 'TYPE_MISMATCH' | 'LOW_QUALITY' | 'MANUAL_REVIEW' | 'ERROR';
+    detectedType?: string | null;
+    requiredType?: string;
+    confidenceScore?: number;
+    extractedSnippet?: string;
+    extractedFields?: Record<string, any>;
+    message?: string;
+    fileName?: string;
+  }>>({
+    ST: { status: 'IDLE', requiredType: 'ST_CERTIFICATE' },
+    INC: { status: 'IDLE', requiredType: 'INCOME_CERTIFICATE' },
+    MARK: { status: 'IDLE', requiredType: 'MARKSHEET' },
+    ADM: { status: 'IDLE', requiredType: 'ADMISSION_PROOF' },
+  });
+
+  const docTypeMapping: Record<'ST' | 'INC' | 'MARK' | 'ADM', string> = {
+    ST: 'ST_CERTIFICATE',
+    INC: 'INCOME_CERTIFICATE',
+    MARK: 'MARKSHEET',
+    ADM: 'ADMISSION_PROOF',
+  };
+
+  const handleSelectDocument = async (
     e: React.ChangeEvent<HTMLInputElement>,
     type: 'ST' | 'INC' | 'MARK' | 'ADM'
   ) => {
@@ -134,6 +162,179 @@ export const ApplicationWizardPage: React.FC = () => {
       setAdmissionFile(file.name);
       setAdmissionFileObj(file);
     }
+
+    const reqType = docTypeMapping[type];
+
+    // Stage 1: Reading document text
+    setOcrStates((prev) => ({
+      ...prev,
+      [type]: {
+        status: 'READING',
+        requiredType: reqType,
+        fileName: file.name,
+        message: 'Extracting text streams and running local OCR...'
+      }
+    }));
+
+    try {
+      // Stage 2: Checking document type against rules
+      setTimeout(() => {
+        setOcrStates((prev) => {
+          if (prev[type].status === 'READING') {
+            return {
+              ...prev,
+              [type]: {
+                ...prev[type],
+                status: 'CHECKING',
+                message: 'Verifying document type against scheme requirements...'
+              }
+            };
+          }
+          return prev;
+        });
+      }, 350);
+
+      const res = await api.verifyDocumentType(file, reqType, draftAppId || undefined);
+
+      setOcrStates((prev) => ({
+        ...prev,
+        [type]: {
+          status: res.match_status as any,
+          detectedType: res.detected_document_type,
+          requiredType: res.required_document_type,
+          confidenceScore: res.confidence,
+          extractedFields: res.extracted_fields,
+          message: res.message,
+          fileName: file.name
+        }
+      }));
+    } catch (err: any) {
+      console.error(`Verification error for ${reqType}:`, err);
+      const errorDetail = err?.response?.data?.detail;
+      if (errorDetail?.verification_result) {
+        const vr = errorDetail.verification_result;
+        setOcrStates((prev) => ({
+          ...prev,
+          [type]: {
+            status: vr.verification_status || 'TYPE_MISMATCH',
+            detectedType: vr.detected_document_type,
+            requiredType: vr.required_document_type,
+            confidenceScore: vr.confidence_score,
+            extractedSnippet: vr.extracted_text_snippet,
+            extractedFields: vr.extracted_fields,
+            message: vr.message || errorDetail.message,
+            fileName: file.name
+          }
+        }));
+      } else {
+        setOcrStates((prev) => ({
+          ...prev,
+          [type]: {
+            status: 'MANUAL_REVIEW',
+            requiredType: reqType,
+            fileName: file.name,
+            message: 'Document scan could not be automatically verified. Queued for manual officer review.'
+          }
+        }));
+      }
+    }
+  };
+
+  const renderOcrStatusBadge = (slotKey: 'ST' | 'INC' | 'MARK' | 'ADM') => {
+    const ocr = ocrStates[slotKey];
+    if (ocr.status === 'READING' || ocr.status === 'CHECKING') {
+      return (
+        <div className="mt-2.5 p-2.5 rounded bg-blue-50 border border-blue-200 text-blue-900 text-xs flex items-center gap-2 animate-pulse">
+          <div className="w-3.5 h-3.5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin flex-shrink-0" />
+          <span className="font-semibold">{ocr.message || 'Extracting and analyzing document text...'}</span>
+        </div>
+      );
+    }
+    if (ocr.status === 'TYPE_MATCH') {
+      return (
+        <div className="mt-2.5 p-2.5 rounded bg-emerald-50 border border-emerald-300 text-emerald-950 text-xs flex items-start gap-2">
+          <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />
+          <div className="space-y-0.5 flex-1">
+            <div className="font-bold flex items-center gap-2">
+              <span>Verified Document Type: {ocr.detectedType}</span>
+              {ocr.confidenceScore && (
+                <span className="px-1.5 py-0.2 bg-emerald-200 text-emerald-900 text-[10px] rounded font-mono">
+                  {Math.round(ocr.confidenceScore * 100)}% Match
+                </span>
+              )}
+            </div>
+            <p className="text-[11px] text-emerald-800">{ocr.message}</p>
+            {ocr.extractedFields && Object.keys(ocr.extractedFields).length > 0 && (
+              <div className="text-[10px] font-mono text-emerald-900 mt-1 flex flex-wrap gap-x-3 gap-y-0.5">
+                {ocr.extractedFields.certificate_number && (
+                  <span>Cert/Reg No: <strong>{ocr.extractedFields.certificate_number}</strong></span>
+                )}
+                {ocr.extractedFields.annual_income && (
+                  <span>Income: <strong>₹{Number(ocr.extractedFields.annual_income).toLocaleString('en-IN')}</strong></span>
+                )}
+                {ocr.extractedFields.community && (
+                  <span>Community: <strong>{ocr.extractedFields.community}</strong></span>
+                )}
+                {ocr.extractedFields.issuing_authority && (
+                  <span>Authority: <strong>{ocr.extractedFields.issuing_authority}</strong></span>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+    if (ocr.status === 'TYPE_MISMATCH') {
+      return (
+        <div className="mt-2.5 p-3 rounded bg-red-50 border border-red-300 text-red-950 text-xs flex items-start gap-2.5">
+          <AlertTriangle className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
+          <div className="space-y-1 flex-1">
+            <div className="font-bold text-red-900 flex items-center gap-2">
+              <span>Document Type Mismatch!</span>
+              <span className="px-1.5 py-0.2 bg-red-200 text-red-950 text-[10px] rounded font-mono font-bold">
+                Detected: {ocr.detectedType || 'UNEXPECTED'}
+              </span>
+            </div>
+            <p className="text-[11px] text-red-800">
+              {ocr.message || `Expected a ${ocr.requiredType}, but this file was recognized as ${ocr.detectedType}.`}
+            </p>
+            <div className="text-[10px] text-red-700 font-semibold">
+              Action required: Please click &quot;Change File&quot; and upload the authentic {ocr.requiredType?.replace(/_/g, ' ')}.
+            </div>
+          </div>
+        </div>
+      );
+    }
+    if (ocr.status === 'LOW_QUALITY') {
+      return (
+        <div className="mt-2.5 p-3 rounded bg-amber-50 border border-amber-300 text-amber-950 text-xs flex items-start gap-2.5">
+          <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+          <div className="space-y-1 flex-1">
+            <div className="font-bold text-amber-900">
+              Unreadable Scan / Low Quality
+            </div>
+            <p className="text-[11px] text-amber-800">
+              {ocr.message || 'Insufficient text extracted from this scan (< 20 characters).'}
+            </p>
+            <div className="text-[10px] text-amber-700 font-semibold">
+              Action required: Please upload a clearer, higher-resolution scan or digital PDF.
+            </div>
+          </div>
+        </div>
+      );
+    }
+    if (ocr.status === 'MANUAL_REVIEW') {
+      return (
+        <div className="mt-2.5 p-2.5 rounded bg-slate-100 border border-slate-300 text-slate-900 text-xs flex items-start gap-2">
+          <Eye className="w-4 h-4 text-slate-600 flex-shrink-0 mt-0.5" />
+          <div>
+            <span className="font-bold">Queued for Manual Review: </span>
+            <span className="text-[11px] text-slate-700">{ocr.message}</span>
+          </div>
+        </div>
+      );
+    }
+    return null;
   };
 
   // ===============================
@@ -240,6 +441,129 @@ export const ApplicationWizardPage: React.FC = () => {
             }
           } catch (docErr) {
             console.warn('Could not fetch reusable certificates:', docErr);
+          }
+
+          // Check for active DRAFT to restore (via URL query param ?draftId=... or scheme match)
+          const draftIdParam = searchParams.get('draftId');
+          let targetDraft: any = null;
+
+          if (draftIdParam) {
+            targetDraft = applications.find((a) => a.id === draftIdParam && a.status === 'DRAFT');
+            if (!targetDraft) {
+              try {
+                const fetched = await api.getApplicationById(draftIdParam);
+                if (fetched && fetched.status === 'DRAFT') {
+                  targetDraft = {
+                    id: fetched.application_id || fetched._id,
+                    schemeId: fetched.scheme_id,
+                    schemeCode: fetched.scheme_id,
+                    currentStep: fetched.current_step || 1,
+                    status: fetched.status,
+                    applicant: {
+                      id: fetched.user_id,
+                      fullName: fetched.personal_details?.full_name || '',
+                      fatherOrHusbandName: fetched.personal_details?.father_or_husband_name || '',
+                      gender: fetched.personal_details?.gender || 'FEMALE',
+                      dob: fetched.personal_details?.dob || '',
+                      aadhaarNumberMasked: fetched.personal_details?.aadhaar_masked || '',
+                      category: fetched.personal_details?.category || 'ST',
+                      tribeCommunity: fetched.personal_details?.tribe_community || '',
+                      mobile: fetched.personal_details?.mobile || '',
+                      email: fetched.personal_details?.email || '',
+                      state: fetched.personal_details?.state || '',
+                      district: fetched.personal_details?.district || '',
+                      pincode: fetched.personal_details?.pincode || '',
+                      disabilityStatus: 'NONE'
+                    },
+                    academic: {
+                      currentCourse: fetched.academic_details?.current_course || '',
+                      institutionName: fetched.academic_details?.institution_name || '',
+                      institutionState: fetched.academic_details?.institution_state || '',
+                      aisheCode: fetched.academic_details?.aishe_code || '',
+                      rollNumber: fetched.academic_details?.roll_number || '',
+                      yearOfStudy: fetched.academic_details?.year_of_study || '',
+                      previousExamName: fetched.academic_details?.previous_exam_name || '',
+                      previousExamPercentage: fetched.academic_details?.previous_exam_percentage || 0,
+                      passingYear: fetched.academic_details?.passing_year || '',
+                      boardOrUniversity: fetched.academic_details?.board_or_university || '',
+                    },
+                    bank: {
+                      accountHolderName: fetched.financial_details?.account_holder_name || '',
+                      bankName: fetched.financial_details?.bank_name || '',
+                      accountNumberMasked: fetched.financial_details?.account_number_masked || '',
+                      ifscCode: fetched.financial_details?.ifsc_code || '',
+                      branchName: fetched.financial_details?.branch_name || '',
+                      isAadhaarSeeded: fetched.financial_details?.is_aadhaar_seeded ?? true,
+                    },
+                    annualFamilyIncome: fetched.financial_details?.annual_family_income || 0,
+                    documents: fetched.documents || []
+                  };
+                }
+              } catch (fetchErr) {
+                console.warn('Could not fetch draft application by ID:', fetchErr);
+              }
+            }
+          } else {
+            // Auto-detect if user has an active draft for the current scheme
+            targetDraft = draftApplications.find(
+              (d) => d.schemeId === selectedSchemeId || d.schemeCode === selectedSchemeId
+            );
+          }
+
+          if (isMounted && targetDraft) {
+            setDraftAppId(targetDraft.id);
+            if (targetDraft.applicant?.fullName) setFullName(targetDraft.applicant.fullName);
+            if (targetDraft.applicant?.fatherOrHusbandName) setFatherName(targetDraft.applicant.fatherOrHusbandName);
+            if (targetDraft.applicant?.gender) setGender(targetDraft.applicant.gender as any);
+            if (targetDraft.applicant?.dob) setDob(targetDraft.applicant.dob);
+            if (targetDraft.applicant?.aadhaarNumberMasked) setMaskedAadhaar(targetDraft.applicant.aadhaarNumberMasked);
+            if (targetDraft.applicant?.category) setCategory(targetDraft.applicant.category as any);
+            if (targetDraft.applicant?.tribeCommunity) setTribeCommunity(targetDraft.applicant.tribeCommunity);
+            if (targetDraft.applicant?.mobile) setMobile(targetDraft.applicant.mobile);
+            if (targetDraft.applicant?.email) setEmail(targetDraft.applicant.email);
+            if (targetDraft.applicant?.state) setState(targetDraft.applicant.state);
+            if (targetDraft.applicant?.district) setDistrict(targetDraft.applicant.district);
+            if (targetDraft.applicant?.pincode) setPincode(targetDraft.applicant.pincode);
+
+            if (targetDraft.annualFamilyIncome) setAnnualFamilyIncome(targetDraft.annualFamilyIncome);
+
+            if (targetDraft.academic) {
+              if (targetDraft.academic.currentCourse) setCurrentCourse(targetDraft.academic.currentCourse);
+              if (targetDraft.academic.institutionName) setInstitutionName(targetDraft.academic.institutionName);
+              if (targetDraft.academic.institutionState) setInstitutionState(targetDraft.academic.institutionState);
+              if (targetDraft.academic.aisheCode) setAisheCode(targetDraft.academic.aisheCode);
+              if (targetDraft.academic.rollNumber) setRollNumber(targetDraft.academic.rollNumber);
+              if (targetDraft.academic.yearOfStudy) setYearOfStudy(targetDraft.academic.yearOfStudy);
+              if (targetDraft.academic.previousExamName) setPreviousExamName(targetDraft.academic.previousExamName);
+              if (targetDraft.academic.previousExamPercentage) setPreviousExamPercentage(targetDraft.academic.previousExamPercentage);
+              if (targetDraft.academic.passingYear) setPassingYear(targetDraft.academic.passingYear);
+              if (targetDraft.academic.boardOrUniversity) setBoardOrUniversity(targetDraft.academic.boardOrUniversity);
+            }
+
+            if (targetDraft.bank) {
+              if (targetDraft.bank.accountHolderName) setAccountHolderName(targetDraft.bank.accountHolderName);
+              if (targetDraft.bank.bankName) setBankName(targetDraft.bank.bankName);
+              if (targetDraft.bank.accountNumberMasked) setAccountNumber(targetDraft.bank.accountNumberMasked.replace(/X/g, ''));
+              if (targetDraft.bank.ifscCode) setIfscCode(targetDraft.bank.ifscCode);
+              if (targetDraft.bank.branchName) setBranchName(targetDraft.bank.branchName);
+              if (targetDraft.bank.isAadhaarSeeded !== undefined) setIsAadhaarSeeded(targetDraft.bank.isAadhaarSeeded);
+            }
+
+            if (targetDraft.documents && targetDraft.documents.length > 0) {
+              targetDraft.documents.forEach((d: any) => {
+                const code = d.documentCode || d.document_code;
+                const name = d.fileName || d.file_name;
+                if (code === 'ST_CERTIFICATE' && name) setStCertFile(name);
+                if (code === 'INCOME_CERTIFICATE' && name) setIncCertFile(name);
+                if (code === 'MARKSHEET' && name) setMarksheetFile(name);
+                if (code === 'ADMISSION_PROOF' && name) setAdmissionFile(name);
+              });
+            }
+
+            if (targetDraft.currentStep && targetDraft.currentStep >= 1 && targetDraft.currentStep <= 8) {
+              setCurrentStep(targetDraft.currentStep);
+            }
+            setRestoredFromDraft(true);
           }
         } else {
           // CASE B: Authenticated user + profile does NOT exist -> Completely empty form
@@ -427,18 +751,19 @@ export const ApplicationWizardPage: React.FC = () => {
 
     await ESignService.signApplicationDeclaration('NEW', fullName.trim());
 
-    const generatedId = existingAppForScheme ? existingAppForScheme.id : `MOTA/${new Date().getFullYear()}-${String(new Date().getFullYear() + 1).slice(-2)}/${selectedScheme.code.split('-')[1]}/${Math.floor(10000 + Math.random() * 90000)}`;
-    setNewGeneratedAppId(generatedId);
+    const targetAppId = draftAppId || (existingAppForScheme ? existingAppForScheme.id : `MOTA/${new Date().getFullYear()}-${String(new Date().getFullYear() + 1).slice(-2)}/${selectedScheme.code.split('-')[1]}/${Math.floor(10000 + Math.random() * 90000)}`);
+    setNewGeneratedAppId(targetAppId);
 
     const newAppRecord: ApplicationRecord = {
-      id: generatedId,
+      id: targetAppId,
       schemeId: selectedScheme.id,
       schemeCode: selectedScheme.code,
       schemeName: selectedScheme.name,
       submissionDate: new Date().toISOString().substring(0, 10),
       lastUpdated: new Date().toISOString().substring(0, 10),
-      currentStageIndex: 2,
-      status: existingAppForScheme && existingAppForScheme.status === 'DEFICIENCY_NOTIFIED' ? 'RESUBMITTED' : 'DOC_VERIFICATION_PENDING',
+      currentStageIndex: 1,
+      currentStep: 8,
+      status: existingAppForScheme && existingAppForScheme.status === 'DEFICIENCY_NOTIFIED' ? 'RESUBMITTED' : 'SUBMITTED',
       applicant: {
         id: currentUser?.id || 'APP-ST-' + Math.floor(1000 + Math.random() * 9000),
         fullName: fullName.trim(),
@@ -550,7 +875,7 @@ export const ApplicationWizardPage: React.FC = () => {
       ]
     };
 
-    let targetAppId = generatedId;
+    let finalAppId = targetAppId;
     if (existingAppForScheme && existingAppForScheme.status === 'DEFICIENCY_NOTIFIED') {
       try {
         const updatePayload = {
@@ -602,15 +927,16 @@ export const ApplicationWizardPage: React.FC = () => {
           status: 'RESUBMITTED',
         };
         await api.updateApplication(existingAppForScheme.id, updatePayload);
+        finalAppId = existingAppForScheme.id;
       } catch (err: any) {
         console.warn('Failed to update application on server:', err);
       }
     } else {
       const persistedApp = await addApplication(newAppRecord);
-      targetAppId = persistedApp?.id || generatedId;
+      finalAppId = persistedApp?.id || targetAppId;
     }
 
-    setNewGeneratedAppId(targetAppId);
+    setNewGeneratedAppId(finalAppId);
 
     // Upload real files to MongoDB Atlas & Storage (or reuse existing)
     const filesToUpload: { type: string; file: File; name: string }[] = [];
@@ -621,7 +947,7 @@ export const ApplicationWizardPage: React.FC = () => {
 
     for (const item of filesToUpload) {
       try {
-        await api.uploadDocument(targetAppId, item.type, item.file);
+        await api.uploadDocument(finalAppId, item.type, item.file);
       } catch (err: any) {
         console.warn(`Document upload error for ${item.name}:`, err.message);
       }
@@ -631,9 +957,98 @@ export const ApplicationWizardPage: React.FC = () => {
     setIsSubmittedSuccess(true);
   };
 
-  const handleSaveDraft = () => {
-    setIsSavedDraft(true);
-    setTimeout(() => setIsSavedDraft(false), 2500);
+  const handleSaveDraft = async () => {
+    setIsSavingDraft(true);
+    try {
+      const payload: any = {
+        application_id: draftAppId || undefined,
+        scheme_id: selectedScheme.id,
+        current_step: currentStep,
+        personal_details: {
+          full_name: fullName.trim() || undefined,
+          father_or_husband_name: fatherName.trim() || undefined,
+          gender: gender || 'FEMALE',
+          dob: dob || undefined,
+          aadhaar_masked: maskedAadhaar || undefined,
+          category: category || 'ST',
+          tribe_community: tribeCommunity.trim() || undefined,
+          mobile: mobile.trim() || undefined,
+          email: email.trim() || currentUser?.email || undefined,
+          state: state.trim() || undefined,
+          district: district.trim() || undefined,
+          pincode: pincode.trim() || undefined,
+        },
+        academic_details: {
+          current_course: currentCourse.trim() || undefined,
+          institution_name: institutionName.trim() || undefined,
+          institution_state: institutionState.trim() || undefined,
+          aishe_code: aisheCode.trim() || undefined,
+          roll_number: rollNumber.trim() || undefined,
+          year_of_study: yearOfStudy.trim() || undefined,
+          previous_exam_name: previousExamName.trim() || undefined,
+          previous_exam_percentage: previousExamPercentage !== '' ? Number(previousExamPercentage) : undefined,
+          passing_year: passingYear.trim() || undefined,
+          board_or_university: boardOrUniversity.trim() || undefined,
+        },
+        financial_details: {
+          annual_family_income: annualFamilyIncome !== '' ? Number(annualFamilyIncome) : 0,
+          bank_name: bankName.trim() || undefined,
+          account_holder_name: accountHolderName.trim() || fullName.trim() || undefined,
+          account_number_masked: accountNumber ? 'XXXXXXXX' + accountNumber.slice(-4) : undefined,
+          ifsc_code: ifscCode.trim() || undefined,
+          branch_name: branchName.trim() || undefined,
+          is_aadhaar_seeded: isAadhaarSeeded,
+        },
+        documents: [
+          ...(stCertFile ? [{
+            id: reusedDocMap['ST_CERTIFICATE']?.document_id || 'DOC-ST-01',
+            document_code: 'ST_CERTIFICATE',
+            document_name: 'ST Community Certificate',
+            file_name: stCertFile,
+            file_url: reusedDocMap['ST_CERTIFICATE']?.download_url || '#',
+            file_size_kb: reusedDocMap['ST_CERTIFICATE']?.file_size_kb || 340,
+            status: 'PENDING'
+          }] : []),
+          ...(incCertFile ? [{
+            id: reusedDocMap['INCOME_CERTIFICATE']?.document_id || 'DOC-INC-01',
+            document_code: 'INCOME_CERTIFICATE',
+            document_name: 'Income Certificate',
+            file_name: incCertFile,
+            file_url: reusedDocMap['INCOME_CERTIFICATE']?.download_url || '#',
+            file_size_kb: reusedDocMap['INCOME_CERTIFICATE']?.file_size_kb || 290,
+            status: 'PENDING'
+          }] : []),
+          ...(marksheetFile ? [{
+            id: reusedDocMap['MARKSHEET']?.document_id || 'DOC-MARK-01',
+            document_code: 'MARKSHEET',
+            document_name: 'Previous Exam Marksheet',
+            file_name: marksheetFile,
+            file_url: reusedDocMap['MARKSHEET']?.download_url || '#',
+            file_size_kb: reusedDocMap['MARKSHEET']?.file_size_kb || 580,
+            status: 'PENDING'
+          }] : []),
+          ...(admissionFile ? [{
+            id: reusedDocMap['ADMISSION_PROOF']?.document_id || 'DOC-ADM-01',
+            document_code: 'ADMISSION_PROOF',
+            document_name: 'University Admission Letter',
+            file_name: admissionFile,
+            file_url: reusedDocMap['ADMISSION_PROOF']?.download_url || '#',
+            file_size_kb: reusedDocMap['ADMISSION_PROOF']?.file_size_kb || 420,
+            status: 'PENDING'
+          }] : [])
+        ]
+      };
+
+      const savedApp = await saveDraft(payload);
+      setDraftAppId(savedApp.id);
+      setIsSavedDraft(true);
+      setDraftSaveMsg(`Draft saved to MongoDB Atlas (${savedApp.id}) at Step ${currentStep}`);
+      setTimeout(() => setIsSavedDraft(false), 3500);
+    } catch (err: any) {
+      alert(`Could not save draft: ${err.message || 'Unknown error'}`);
+    } finally {
+      setIsSavingDraft(false);
+    }
   };
 
   const existingAppForSchemeLockCheck = applications.find(
@@ -773,19 +1188,39 @@ export const ApplicationWizardPage: React.FC = () => {
         {/* Save Draft button */}
         <div className="flex items-center gap-2">
           {isSavedDraft && (
-            <span className="text-xs text-emerald-700 font-semibold bg-emerald-50 px-2.5 py-1 rounded border border-emerald-200 animate-pulse">
-              ✓ Draft Saved Locally
+            <span className="text-xs text-emerald-800 font-semibold bg-emerald-50 px-2.5 py-1 rounded border border-emerald-300 animate-pulse flex items-center gap-1.5 shadow-sm">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+              <span>{draftSaveMsg || 'Draft Saved to MongoDB Atlas (tsfms)'}</span>
             </span>
           )}
           <button
+            type="button"
+            disabled={isSavingDraft}
             onClick={handleSaveDraft}
-            className="px-3.5 py-1.5 bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 text-xs font-semibold rounded flex items-center gap-1.5"
+            className="px-3.5 py-1.5 bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 text-xs font-semibold rounded flex items-center gap-1.5 shadow-sm disabled:opacity-50"
           >
-            <Save className="w-3.5 h-3.5 text-slate-500" />
-            <span>Save as Draft</span>
+            <Save className={`w-3.5 h-3.5 ${isSavingDraft ? 'animate-spin text-blue-700' : 'text-slate-500'}`} />
+            <span>{isSavingDraft ? 'Saving to Database...' : 'Save as Draft'}</span>
           </button>
         </div>
       </div>
+
+      {/* Resumed Draft Notification Banner */}
+      {restoredFromDraft && draftAppId && (
+        <div className="bg-blue-50 border border-blue-200 rounded p-3 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-blue-900 shadow-sm">
+          <div className="flex items-center gap-2">
+            <span className="bg-blue-700 text-white font-mono px-2 py-0.5 rounded text-[10px] font-bold tracking-wider">
+              RESUMED DRAFT
+            </span>
+            <span>
+              Resumed draft application <strong className="font-mono">{draftAppId}</strong> at <strong>Step {currentStep}: {steps[currentStep - 1]?.label}</strong>.
+            </span>
+          </div>
+          <span className="text-blue-700 text-[11px] font-medium">
+            Saved in MongoDB Atlas (<code className="font-bold">tsfms.applications</code>)
+          </span>
+        </div>
+      )}
 
       {/* Step Progress Bar */}
       <div className="bg-white p-4 rounded border border-slate-300 shadow-sm overflow-x-auto">
@@ -1347,169 +1782,271 @@ export const ApplicationWizardPage: React.FC = () => {
               </div>
             )}
 
+            {/* Document Mismatch Alert Banner */}
+            {Object.values(ocrStates).some((s) => s.status === 'TYPE_MISMATCH') && (
+              <div className="p-3 bg-red-50 border border-red-300 rounded text-red-900 text-xs flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0" />
+                <div>
+                  <span className="font-bold">Attention: Document Type Mismatch Detected!</span> One or more uploaded certificates do not match the expected category. Please upload the correct certificates before proceeding.
+                </div>
+              </div>
+            )}
+
             <div className="space-y-3">
               {/* ST Certificate */}
-              <div className="p-3.5 bg-slate-50 border border-slate-200 rounded flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div>
-                  <div className="font-bold text-slate-900">1. ST Caste / Tribe Community Certificate</div>
-                  <div className="text-[11px] font-mono">
-                    {stCertFile ? (
-                      <span className="text-slate-800">Current file: <strong>{stCertFile}</strong></span>
-                    ) : (
-                      <span className="text-amber-700 italic">No document selected yet</span>
+              <div className="p-3.5 bg-slate-50 border border-slate-200 rounded">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <div className="font-bold text-slate-900">1. ST Caste / Tribe Community Certificate</div>
+                    <div className="text-[11px] font-mono">
+                      {stCertFile ? (
+                        <span className="text-slate-800">Current file: <strong>{stCertFile}</strong></span>
+                      ) : (
+                        <span className="text-amber-700 italic">No document selected yet</span>
+                      )}
+                    </div>
+                    {reusedDocMap['ST_CERTIFICATE'] && !stCertFileObj && (
+                      <span className="inline-flex items-center gap-1 text-[10px] text-emerald-700 font-bold mt-0.5">
+                        <CheckCircle2 className="w-3 h-3" />
+                        Reusing verified certificate from previous application
+                      </span>
                     )}
                   </div>
-                  {reusedDocMap['ST_CERTIFICATE'] && !stCertFileObj && (
-                    <span className="inline-flex items-center gap-1 text-[10px] text-emerald-700 font-bold mt-0.5">
-                      <CheckCircle2 className="w-3 h-3" />
-                      Reusing verified certificate from previous application
-                    </span>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {ocrStates.ST.status === 'TYPE_MATCH' ? (
+                      <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded border border-emerald-300">
+                        VERIFIED MATCH
+                      </span>
+                    ) : ocrStates.ST.status === 'TYPE_MISMATCH' ? (
+                      <span className="text-[10px] bg-red-100 text-red-800 font-bold px-2 py-0.5 rounded border border-red-300 animate-pulse">
+                        TYPE MISMATCH
+                      </span>
+                    ) : ocrStates.ST.status === 'LOW_QUALITY' ? (
+                      <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded border border-amber-300">
+                        LOW QUALITY
+                      </span>
+                    ) : ocrStates.ST.status === 'READING' || ocrStates.ST.status === 'CHECKING' ? (
+                      <span className="text-[10px] bg-blue-100 text-blue-800 font-bold px-2 py-0.5 rounded border border-blue-300 animate-pulse">
+                        VERIFYING...
+                      </span>
+                    ) : ocrStates.ST.status === 'MANUAL_REVIEW' ? (
+                      <span className="text-[10px] bg-slate-200 text-slate-800 font-bold px-2 py-0.5 rounded border border-slate-300">
+                        MANUAL REVIEW
+                      </span>
+                    ) : stCertFile ? (
+                      <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded">
+                        OCR READY
+                      </span>
+                    ) : (
+                      <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded">
+                        PENDING UPLOAD
+                      </span>
+                    )}
+                    <label className="cursor-pointer px-3 py-1.5 bg-white border border-slate-300 rounded font-semibold text-slate-700 hover:bg-slate-100 flex items-center gap-1">
+                      <Upload className="w-3.5 h-3.5" />
+                      <span>{reusedDocMap['ST_CERTIFICATE'] && !stCertFileObj ? 'Replace Scan' : stCertFile ? 'Change File' : 'Upload File'}</span>
+                      <input
+                        type="file"
+                        accept=".pdf,.jpg,.jpeg,.png"
+                        className="sr-only"
+                        onChange={(e) => handleSelectDocument(e, 'ST')}
+                      />
+                    </label>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  {stCertFile ? (
-                    <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded">
-                      OCR READY
-                    </span>
-                  ) : (
-                    <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded">
-                      PENDING UPLOAD
-                    </span>
-                  )}
-                  <label className="cursor-pointer px-3 py-1.5 bg-white border border-slate-300 rounded font-semibold text-slate-700 hover:bg-slate-100 flex items-center gap-1">
-                    <Upload className="w-3.5 h-3.5" />
-                    <span>{reusedDocMap['ST_CERTIFICATE'] && !stCertFileObj ? 'Replace Scan' : stCertFile ? 'Change File' : 'Upload File'}</span>
-                    <input
-                      type="file"
-                      accept=".pdf,.jpg,.jpeg,.png"
-                      className="sr-only"
-                      onChange={(e) => handleSelectDocument(e, 'ST')}
-                    />
-                  </label>
-                </div>
+                {renderOcrStatusBadge('ST')}
               </div>
 
               {/* Income Certificate */}
-              <div className="p-3.5 bg-slate-50 border border-slate-200 rounded flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div>
-                  <div className="font-bold text-slate-900">2. Competent Tehsildar Income Certificate (FY 2024-25)</div>
-                  <div className="text-[11px] font-mono">
-                    {incCertFile ? (
-                      <span className="text-slate-800">Current file: <strong>{incCertFile}</strong></span>
-                    ) : (
-                      <span className="text-amber-700 italic">No document selected yet</span>
+              <div className="p-3.5 bg-slate-50 border border-slate-200 rounded">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <div className="font-bold text-slate-900">2. Competent Tehsildar Income Certificate (FY 2024-25)</div>
+                    <div className="text-[11px] font-mono">
+                      {incCertFile ? (
+                        <span className="text-slate-800">Current file: <strong>{incCertFile}</strong></span>
+                      ) : (
+                        <span className="text-amber-700 italic">No document selected yet</span>
+                      )}
+                    </div>
+                    {reusedDocMap['INCOME_CERTIFICATE'] && !incCertFileObj && (
+                      <span className="inline-flex items-center gap-1 text-[10px] text-emerald-700 font-bold mt-0.5">
+                        <CheckCircle2 className="w-3 h-3" />
+                        Reusing verified certificate from previous application
+                      </span>
                     )}
                   </div>
-                  {reusedDocMap['INCOME_CERTIFICATE'] && !incCertFileObj && (
-                    <span className="inline-flex items-center gap-1 text-[10px] text-emerald-700 font-bold mt-0.5">
-                      <CheckCircle2 className="w-3 h-3" />
-                      Reusing verified certificate from previous application
-                    </span>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {ocrStates.INC.status === 'TYPE_MATCH' ? (
+                      <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded border border-emerald-300">
+                        VERIFIED MATCH
+                      </span>
+                    ) : ocrStates.INC.status === 'TYPE_MISMATCH' ? (
+                      <span className="text-[10px] bg-red-100 text-red-800 font-bold px-2 py-0.5 rounded border border-red-300 animate-pulse">
+                        TYPE MISMATCH
+                      </span>
+                    ) : ocrStates.INC.status === 'LOW_QUALITY' ? (
+                      <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded border border-amber-300">
+                        LOW QUALITY
+                      </span>
+                    ) : ocrStates.INC.status === 'READING' || ocrStates.INC.status === 'CHECKING' ? (
+                      <span className="text-[10px] bg-blue-100 text-blue-800 font-bold px-2 py-0.5 rounded border border-blue-300 animate-pulse">
+                        VERIFYING...
+                      </span>
+                    ) : ocrStates.INC.status === 'MANUAL_REVIEW' ? (
+                      <span className="text-[10px] bg-slate-200 text-slate-800 font-bold px-2 py-0.5 rounded border border-slate-300">
+                        MANUAL REVIEW
+                      </span>
+                    ) : incCertFile ? (
+                      <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded">
+                        OCR READY
+                      </span>
+                    ) : (
+                      <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded">
+                        PENDING UPLOAD
+                      </span>
+                    )}
+                    <label className="cursor-pointer px-3 py-1.5 bg-white border border-slate-300 rounded font-semibold text-slate-700 hover:bg-slate-100 flex items-center gap-1">
+                      <Upload className="w-3.5 h-3.5" />
+                      <span>{reusedDocMap['INCOME_CERTIFICATE'] && !incCertFileObj ? 'Replace Scan' : incCertFile ? 'Change File' : 'Upload File'}</span>
+                      <input
+                        type="file"
+                        accept=".pdf,.jpg,.jpeg,.png"
+                        className="sr-only"
+                        onChange={(e) => handleSelectDocument(e, 'INC')}
+                      />
+                    </label>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  {incCertFile ? (
-                    <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded">
-                      OCR READY
-                    </span>
-                  ) : (
-                    <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded">
-                      PENDING UPLOAD
-                    </span>
-                  )}
-                  <label className="cursor-pointer px-3 py-1.5 bg-white border border-slate-300 rounded font-semibold text-slate-700 hover:bg-slate-100 flex items-center gap-1">
-                    <Upload className="w-3.5 h-3.5" />
-                    <span>{reusedDocMap['INCOME_CERTIFICATE'] && !incCertFileObj ? 'Replace Scan' : incCertFile ? 'Change File' : 'Upload File'}</span>
-                    <input
-                      type="file"
-                      accept=".pdf,.jpg,.jpeg,.png"
-                      className="sr-only"
-                      onChange={(e) => handleSelectDocument(e, 'INC')}
-                    />
-                  </label>
-                </div>
+                {renderOcrStatusBadge('INC')}
               </div>
 
               {/* Marksheet */}
-              <div className="p-3.5 bg-slate-50 border border-slate-200 rounded flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div>
-                  <div className="font-bold text-slate-900">3. Previous Qualifying Marksheet / Degree Certificate</div>
-                  <div className="text-[11px] font-mono">
-                    {marksheetFile ? (
-                      <span className="text-slate-800">Current file: <strong>{marksheetFile}</strong></span>
-                    ) : (
-                      <span className="text-amber-700 italic">No document selected yet</span>
+              <div className="p-3.5 bg-slate-50 border border-slate-200 rounded">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <div className="font-bold text-slate-900">3. Previous Qualifying Marksheet / Degree Certificate</div>
+                    <div className="text-[11px] font-mono">
+                      {marksheetFile ? (
+                        <span className="text-slate-800">Current file: <strong>{marksheetFile}</strong></span>
+                      ) : (
+                        <span className="text-amber-700 italic">No document selected yet</span>
+                      )}
+                    </div>
+                    {reusedDocMap['MARKSHEET'] && !marksheetFileObj && (
+                      <span className="inline-flex items-center gap-1 text-[10px] text-emerald-700 font-bold mt-0.5">
+                        <CheckCircle2 className="w-3 h-3" />
+                        Reusing verified certificate from previous application
+                      </span>
                     )}
                   </div>
-                  {reusedDocMap['MARKSHEET'] && !marksheetFileObj && (
-                    <span className="inline-flex items-center gap-1 text-[10px] text-emerald-700 font-bold mt-0.5">
-                      <CheckCircle2 className="w-3 h-3" />
-                      Reusing verified certificate from previous application
-                    </span>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {ocrStates.MARK.status === 'TYPE_MATCH' ? (
+                      <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded border border-emerald-300">
+                        VERIFIED MATCH
+                      </span>
+                    ) : ocrStates.MARK.status === 'TYPE_MISMATCH' ? (
+                      <span className="text-[10px] bg-red-100 text-red-800 font-bold px-2 py-0.5 rounded border border-red-300 animate-pulse">
+                        TYPE MISMATCH
+                      </span>
+                    ) : ocrStates.MARK.status === 'LOW_QUALITY' ? (
+                      <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded border border-amber-300">
+                        LOW QUALITY
+                      </span>
+                    ) : ocrStates.MARK.status === 'READING' || ocrStates.MARK.status === 'CHECKING' ? (
+                      <span className="text-[10px] bg-blue-100 text-blue-800 font-bold px-2 py-0.5 rounded border border-blue-300 animate-pulse">
+                        VERIFYING...
+                      </span>
+                    ) : ocrStates.MARK.status === 'MANUAL_REVIEW' ? (
+                      <span className="text-[10px] bg-slate-200 text-slate-800 font-bold px-2 py-0.5 rounded border border-slate-300">
+                        MANUAL REVIEW
+                      </span>
+                    ) : marksheetFile ? (
+                      <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded">
+                        OCR READY
+                      </span>
+                    ) : (
+                      <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded">
+                        PENDING UPLOAD
+                      </span>
+                    )}
+                    <label className="cursor-pointer px-3 py-1.5 bg-white border border-slate-300 rounded font-semibold text-slate-700 hover:bg-slate-100 flex items-center gap-1">
+                      <Upload className="w-3.5 h-3.5" />
+                      <span>{reusedDocMap['MARKSHEET'] && !marksheetFileObj ? 'Replace Scan' : marksheetFile ? 'Change File' : 'Upload File'}</span>
+                      <input
+                        type="file"
+                        accept=".pdf,.jpg,.jpeg,.png"
+                        className="sr-only"
+                        onChange={(e) => handleSelectDocument(e, 'MARK')}
+                      />
+                    </label>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  {marksheetFile ? (
-                    <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded">
-                      OCR READY
-                    </span>
-                  ) : (
-                    <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded">
-                      PENDING UPLOAD
-                    </span>
-                  )}
-                  <label className="cursor-pointer px-3 py-1.5 bg-white border border-slate-300 rounded font-semibold text-slate-700 hover:bg-slate-100 flex items-center gap-1">
-                    <Upload className="w-3.5 h-3.5" />
-                    <span>{reusedDocMap['MARKSHEET'] && !marksheetFileObj ? 'Replace Scan' : marksheetFile ? 'Change File' : 'Upload File'}</span>
-                    <input
-                      type="file"
-                      accept=".pdf,.jpg,.jpeg,.png"
-                      className="sr-only"
-                      onChange={(e) => handleSelectDocument(e, 'MARK')}
-                    />
-                  </label>
-                </div>
+                {renderOcrStatusBadge('MARK')}
               </div>
 
               {/* Admission Letter */}
-              <div className="p-3.5 bg-slate-50 border border-slate-200 rounded flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div>
-                  <div className="font-bold text-slate-900">4. University Admission / Research Joining Report</div>
-                  <div className="text-[11px] font-mono">
-                    {admissionFile ? (
-                      <span className="text-slate-800">Current file: <strong>{admissionFile}</strong></span>
-                    ) : (
-                      <span className="text-amber-700 italic">No document selected yet</span>
+              <div className="p-3.5 bg-slate-50 border border-slate-200 rounded">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <div className="font-bold text-slate-900">4. University Admission / Research Joining Report</div>
+                    <div className="text-[11px] font-mono">
+                      {admissionFile ? (
+                        <span className="text-slate-800">Current file: <strong>{admissionFile}</strong></span>
+                      ) : (
+                        <span className="text-amber-700 italic">No document selected yet</span>
+                      )}
+                    </div>
+                    {reusedDocMap['ADMISSION_PROOF'] && !admissionFileObj && (
+                      <span className="inline-flex items-center gap-1 text-[10px] text-emerald-700 font-bold mt-0.5">
+                        <CheckCircle2 className="w-3 h-3" />
+                        Reusing verified document from previous application
+                      </span>
                     )}
                   </div>
-                  {reusedDocMap['ADMISSION_PROOF'] && !admissionFileObj && (
-                    <span className="inline-flex items-center gap-1 text-[10px] text-emerald-700 font-bold mt-0.5">
-                      <CheckCircle2 className="w-3 h-3" />
-                      Reusing verified document from previous application
-                    </span>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {ocrStates.ADM.status === 'TYPE_MATCH' ? (
+                      <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded border border-emerald-300">
+                        VERIFIED MATCH
+                      </span>
+                    ) : ocrStates.ADM.status === 'TYPE_MISMATCH' ? (
+                      <span className="text-[10px] bg-red-100 text-red-800 font-bold px-2 py-0.5 rounded border border-red-300 animate-pulse">
+                        TYPE MISMATCH
+                      </span>
+                    ) : ocrStates.ADM.status === 'LOW_QUALITY' ? (
+                      <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded border border-amber-300">
+                        LOW QUALITY
+                      </span>
+                    ) : ocrStates.ADM.status === 'READING' || ocrStates.ADM.status === 'CHECKING' ? (
+                      <span className="text-[10px] bg-blue-100 text-blue-800 font-bold px-2 py-0.5 rounded border border-blue-300 animate-pulse">
+                        VERIFYING...
+                      </span>
+                    ) : ocrStates.ADM.status === 'MANUAL_REVIEW' ? (
+                      <span className="text-[10px] bg-slate-200 text-slate-800 font-bold px-2 py-0.5 rounded border border-slate-300">
+                        MANUAL REVIEW
+                      </span>
+                    ) : admissionFile ? (
+                      <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded">
+                        OCR READY
+                      </span>
+                    ) : (
+                      <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded">
+                        PENDING UPLOAD
+                      </span>
+                    )}
+                    <label className="cursor-pointer px-3 py-1.5 bg-white border border-slate-300 rounded font-semibold text-slate-700 hover:bg-slate-100 flex items-center gap-1">
+                      <Upload className="w-3.5 h-3.5" />
+                      <span>{reusedDocMap['ADMISSION_PROOF'] && !admissionFileObj ? 'Replace Scan' : admissionFile ? 'Change File' : 'Upload File'}</span>
+                      <input
+                        type="file"
+                        accept=".pdf,.jpg,.jpeg,.png"
+                        className="sr-only"
+                        onChange={(e) => handleSelectDocument(e, 'ADM')}
+                      />
+                    </label>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  {admissionFile ? (
-                    <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded">
-                      OCR READY
-                    </span>
-                  ) : (
-                    <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded">
-                      PENDING UPLOAD
-                    </span>
-                  )}
-                  <label className="cursor-pointer px-3 py-1.5 bg-white border border-slate-300 rounded font-semibold text-slate-700 hover:bg-slate-100 flex items-center gap-1">
-                    <Upload className="w-3.5 h-3.5" />
-                    <span>{reusedDocMap['ADMISSION_PROOF'] && !admissionFileObj ? 'Replace Scan' : admissionFile ? 'Change File' : 'Upload File'}</span>
-                    <input
-                      type="file"
-                      accept=".pdf,.jpg,.jpeg,.png"
-                      className="sr-only"
-                      onChange={(e) => handleSelectDocument(e, 'ADM')}
-                    />
-                  </label>
-                </div>
+                {renderOcrStatusBadge('ADM')}
               </div>
             </div>
           </div>
@@ -1526,16 +2063,25 @@ export const ApplicationWizardPage: React.FC = () => {
                 </h2>
               </div>
               <p className="text-slate-500 text-[11px]">
-                The system has automatically analyzed your uploaded certificates. Review the extracted fields to ensure there are no clerical discrepancies.
+                The system has automatically analyzed your uploaded certificates with local OCR and rule-based document validation. Review the extracted fields to ensure there are no clerical discrepancies.
               </p>
             </div>
 
-            {/* Simulated OCR Verification Component */}
+            {/* Real OCR Verification Viewers */}
             <DocumentOcrViewer
               documentType="ST_CERTIFICATE"
               applicantName={fullName}
               declaredIncome={Number(annualFamilyIncome) || 0}
               isDeficientScenario={false}
+              fileName={stCertFile}
+              isLiveUpload={!!stCertFileObj}
+              ocrVerification={ocrStates.ST.status !== 'IDLE' ? {
+                status: ocrStates.ST.status,
+                message: ocrStates.ST.message,
+                detectedType: ocrStates.ST.detectedType || undefined,
+                confidence: ocrStates.ST.confidenceScore,
+                extractedFields: ocrStates.ST.extractedFields
+              } : undefined}
             />
 
             <DocumentOcrViewer
@@ -1543,7 +2089,33 @@ export const ApplicationWizardPage: React.FC = () => {
               applicantName={fullName}
               declaredIncome={Number(annualFamilyIncome) || 0}
               isDeficientScenario={false}
+              fileName={incCertFile}
+              isLiveUpload={!!incCertFileObj}
+              ocrVerification={ocrStates.INC.status !== 'IDLE' ? {
+                status: ocrStates.INC.status,
+                message: ocrStates.INC.message,
+                detectedType: ocrStates.INC.detectedType || undefined,
+                confidence: ocrStates.INC.confidenceScore,
+                extractedFields: ocrStates.INC.extractedFields
+              } : undefined}
             />
+
+            {marksheetFile && (
+              <DocumentOcrViewer
+                documentType="MARKSHEET"
+                applicantName={fullName}
+                isDeficientScenario={false}
+                fileName={marksheetFile}
+                isLiveUpload={!!marksheetFileObj}
+                ocrVerification={ocrStates.MARK.status !== 'IDLE' ? {
+                  status: ocrStates.MARK.status,
+                  message: ocrStates.MARK.message,
+                  detectedType: ocrStates.MARK.detectedType || undefined,
+                  confidence: ocrStates.MARK.confidenceScore,
+                  extractedFields: ocrStates.MARK.extractedFields
+                } : undefined}
+              />
+            )}
 
             {/* Explainable Decision Card */}
             <div className="bg-slate-50 border border-slate-200 rounded p-4 mt-6">
@@ -1724,15 +2296,27 @@ export const ApplicationWizardPage: React.FC = () => {
 
         {/* Wizard Footer Navigation Controls */}
         <div className="flex flex-wrap items-center justify-between gap-3 pt-6 border-t border-slate-200 mt-6">
-          <button
-            type="button"
-            disabled={currentStep === 1}
-            onClick={() => setCurrentStep((prev) => Math.max(prev - 1, 1))}
-            className="px-4 py-2 border border-slate-300 rounded font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            <span>Previous</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={currentStep === 1}
+              onClick={() => setCurrentStep((prev) => Math.max(prev - 1, 1))}
+              className="px-4 py-2 border border-slate-300 rounded font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>Previous</span>
+            </button>
+
+            <button
+              type="button"
+              disabled={isSavingDraft}
+              onClick={handleSaveDraft}
+              className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded font-semibold text-xs flex items-center gap-1.5 shadow-sm disabled:opacity-50"
+            >
+              <Save className={`w-3.5 h-3.5 ${isSavingDraft ? 'animate-spin text-blue-700' : 'text-slate-500'}`} />
+              <span>{isSavingDraft ? 'Saving Draft...' : 'Save Draft'}</span>
+            </button>
+          </div>
 
           <div className="text-slate-500 text-[11px] font-medium">
             Step {currentStep} of 8: <strong>{steps[currentStep - 1].label}</strong>
@@ -1741,7 +2325,16 @@ export const ApplicationWizardPage: React.FC = () => {
           {currentStep < 8 ? (
             <button
               type="button"
-              onClick={() => setCurrentStep((prev) => Math.min(prev + 1, 8))}
+              onClick={() => {
+                if (currentStep === 5) {
+                  const mismatches = Object.entries(ocrStates).filter(([_, s]) => s.status === 'TYPE_MISMATCH');
+                  if (mismatches.length > 0) {
+                    alert('Document Type Mismatch Detected: Please replace the mismatched document with the required certificate type before proceeding.');
+                    return;
+                  }
+                }
+                setCurrentStep((prev) => Math.min(prev + 1, 8));
+              }}
               className="px-5 py-2 bg-[#0b2853] hover:bg-[#134685] text-white rounded font-bold shadow-sm flex items-center gap-1.5"
             >
               <span>Next: {steps[currentStep].label}</span>

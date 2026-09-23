@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from datetime import datetime
 from pydantic import BaseModel, Field
 
@@ -10,6 +10,12 @@ class DocumentType(str, Enum):
     ADMISSION_PROOF = "ADMISSION_PROOF"
     BANK_DOCUMENT = "BANK_DOCUMENT"
     IDENTITY_DOCUMENT = "IDENTITY_DOCUMENT"
+
+class VerificationStatus(str, Enum):
+    TYPE_MATCH = "TYPE_MATCH"
+    TYPE_MISMATCH = "TYPE_MISMATCH"
+    MANUAL_REVIEW = "MANUAL_REVIEW"
+    LOW_QUALITY = "LOW_QUALITY"
 
 class DocumentMetadata(BaseModel):
     document_id: str
@@ -27,6 +33,11 @@ class DocumentMetadata(BaseModel):
     superseded_by: Optional[str] = None
     version: int = 1
     download_url: Optional[str] = None
+    ocr_processed: bool = False
+    detected_document_type: Optional[str] = None
+    classification_confidence: Optional[float] = None
+    verification_status: Optional[str] = None
+    verification_message: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
     class Config:
@@ -41,5 +52,21 @@ class DocumentUploadResponse(BaseModel):
     storage_path: str
     storage_key: Optional[str] = None
     download_url: Optional[str] = None
-    message: str = "Document uploaded and binary securely stored."
+    ocr_processed: bool = True
+    detected_document_type: Optional[str] = None
+    classification_confidence: Optional[float] = None
+    verification_status: Optional[str] = None
+    message: str = "Document uploaded, verified with OCR, and binary securely stored."
     uploaded_at: datetime = Field(default_factory=datetime.utcnow)
+
+class DocumentTypeVerificationResponse(BaseModel):
+    success: bool
+    required_document_type: str
+    detected_document_type: Optional[str] = None
+    match_status: VerificationStatus
+    confidence: float
+    message: str
+    is_acceptable: bool
+    character_count: int
+    detected_keywords: List[str] = []
+    extracted_fields: Dict[str, Optional[str]] = {}

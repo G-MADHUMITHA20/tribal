@@ -4,13 +4,18 @@
  * Note: MongoDB credentials must NEVER be stored or exposed in this frontend layer.
  */
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
+const DEFAULT_API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api';
 
 class ApiClient {
   private token: string | null = null;
+  private activeBaseUrl: string = DEFAULT_API_BASE_URL;
 
   constructor() {
     this.token = localStorage.getItem('tsfms_auth_token');
+  }
+
+  public getBaseUrl(): string {
+    return this.activeBaseUrl;
   }
 
   public setToken(token: string | null) {
@@ -26,6 +31,43 @@ class ApiClient {
     return this.token || localStorage.getItem('tsfms_auth_token');
   }
 
+  /**
+   * Internal fetch wrapper with automatic loopback failover (127.0.0.1 <-> localhost)
+   * and clean error categorization to prevent unhandled "Failed to fetch" crashes.
+   */
+  public async fetchWithFallback(endpoint: string, options: RequestInit = {}): Promise<Response> {
+    const url = `${this.activeBaseUrl}${endpoint}`;
+    try {
+      return await fetch(url, options);
+    } catch (primaryErr: any) {
+      // Determine failover candidate if localhost or 127.0.0.1 failed due to socket / IPv6 refusal
+      let fallbackCandidate = '';
+      if (this.activeBaseUrl.includes('localhost:8000')) {
+        fallbackCandidate = this.activeBaseUrl.replace('localhost:8000', '127.0.0.1:8000');
+      } else if (this.activeBaseUrl.includes('127.0.0.1:8000')) {
+        fallbackCandidate = this.activeBaseUrl.replace('127.0.0.1:8000', 'localhost:8000');
+      }
+
+      if (fallbackCandidate) {
+        try {
+          const fallbackResp = await fetch(`${fallbackCandidate}${endpoint}`, options);
+          this.activeBaseUrl = fallbackCandidate;
+          return fallbackResp;
+        } catch (_) {
+          // If fallback candidate also fails, fall through to structured network error
+        }
+      }
+
+      // Friendly and informative network error instead of generic 'Failed to fetch'
+      const netError: any = new Error(
+        'Unable to connect to the backend server. Please verify the FastAPI service is running at ' + this.activeBaseUrl
+      );
+      netError.status = 0;
+      netError.isNetworkError = true;
+      throw netError;
+    }
+  }
+
   private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -37,7 +79,7 @@ class ApiClient {
       headers['Authorization'] = `Bearer ${token}`;
     }
 
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    const response = await this.fetchWithFallback(endpoint, {
       ...options,
       headers,
     });
@@ -50,7 +92,17 @@ class ApiClient {
           errorMessage = typeof errorData.detail === 'string' ? errorData.detail : JSON.stringify(errorData.detail);
         }
       } catch (_) {
-        // Fallback to generic message
+        if (response.status === 401) {
+          errorMessage = 'Invalid email or password. Please verify your credentials.';
+        } else if (response.status === 403) {
+          errorMessage = 'Access denied. Your account is deactivated or unauthorized.';
+        } else if (response.status === 404) {
+          errorMessage = 'The requested resource was not found.';
+        } else if (response.status === 422) {
+          errorMessage = 'Validation error: invalid request payload.';
+        } else if (response.status >= 500) {
+          errorMessage = 'Server error: login service is temporarily unavailable.';
+        }
       }
       const error: any = new Error(errorMessage);
       error.status = response.status;
@@ -171,6 +223,13 @@ class ApiClient {
     });
   }
 
+  public async saveApplicationDraft(payload: any) {
+    return this.request<any>('/applications/draft', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
   public async getMyApplications() {
     return this.request<any[]>('/applications/my');
   }
@@ -187,6 +246,51 @@ class ApiClient {
   }
 
   // Documents
+  public async verifyDocumentType(file: File, requiredType: string, applicationId?: string): Promise<{
+    success: boolean;
+    required_document_type: string;
+    detected_document_type?: string;
+    match_status: 'TYPE_MATCH' | 'TYPE_MISMATCH' | 'MANUAL_REVIEW' | 'LOW_QUALITY';
+    confidence: number;
+    message: string;
+    is_acceptable: boolean;
+    character_count: number;
+    detected_keywords: string[];
+    extracted_fields: Record<string, string | null>;
+  }> {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('required_document_type', requiredType);
+    if (applicationId) {
+      formData.append('application_id', applicationId);
+    }
+
+    const token = this.getToken();
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const response = await this.fetchWithFallback('/documents/verify-type', {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+
+    if (!response.ok) {
+      let errorMsg = `Verification failed: ${response.statusText}`;
+      try {
+        const errJson = await response.json();
+        if (errJson.detail) {
+          errorMsg = typeof errJson.detail === 'string' ? errJson.detail : JSON.stringify(errJson.detail);
+        }
+      } catch (_) {}
+      throw new Error(errorMsg);
+    }
+
+    return response.json();
+  }
+
   public async uploadDocument(applicationId: string, documentType: string, file: File) {
     const formData = new FormData();
     formData.append('application_id', applicationId);
@@ -199,7 +303,7 @@ class ApiClient {
       headers['Authorization'] = `Bearer ${token}`;
     }
 
-    const response = await fetch(`${API_BASE_URL}/documents/upload`, {
+    const response = await this.fetchWithFallback('/documents/upload', {
       method: 'POST',
       headers,
       body: formData,
@@ -227,7 +331,7 @@ class ApiClient {
       headers['Authorization'] = `Bearer ${token}`;
     }
 
-    const response = await fetch(`${API_BASE_URL}/documents/${encodeURIComponent(documentId)}/replace`, {
+    const response = await this.fetchWithFallback(`/documents/${encodeURIComponent(documentId)}/replace`, {
       method: 'POST',
       headers,
       body: formData,
@@ -260,7 +364,7 @@ class ApiClient {
       headers['Authorization'] = `Bearer ${token}`;
     }
 
-    const response = await fetch(`${API_BASE_URL}/documents/${encodeURIComponent(documentId)}/file`, {
+    const response = await this.fetchWithFallback(`/documents/${encodeURIComponent(documentId)}/file`, {
       headers,
     });
 

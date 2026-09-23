@@ -10,7 +10,9 @@ import {
   Wallet,
   ShieldAlert,
   ArrowRight,
-  Calendar
+  Calendar,
+  UserPlus,
+  RotateCcw
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { getSchemeWindowStatus } from '../../utils/schemeWindow';
@@ -29,7 +31,6 @@ import {
   Line,
   CartesianGrid
 } from 'recharts';
-import { formatDistanceToNow } from 'date-fns';
 
 export const AdminDashboardPage: React.FC = () => {
   const { applications, schemes, auditLogs } = useApp();

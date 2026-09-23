@@ -18,9 +18,22 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
+const STEP_LABELS: Record<number, string> = {
+  1: 'Personal Details',
+  2: 'Eligibility Criteria',
+  3: 'Academic Details',
+  4: 'Bank Details (PFMS DBT)',
+  5: 'Supporting Documents',
+  6: 'AI Pre-Check',
+  7: 'Preview',
+  8: 'Statutory Declaration & e-Sign'
+};
+
 export const ApplicantDashboardPage: React.FC = () => {
   const {
     currentApplicantApplication,
+    draftApplications,
+    activeDraft,
     resolveApplicationDeficiency,
     currentUser,
     isLoadingApplications,
@@ -73,25 +86,101 @@ export const ApplicantDashboardPage: React.FC = () => {
   }
 
   if (!app) {
+    if (!activeDraft) {
+      return (
+        <div className="bg-white p-8 rounded-lg border border-slate-300 shadow-sm text-center space-y-4">
+          <div className="w-12 h-12 bg-blue-50 border border-blue-200 text-[#0b2853] rounded-full flex items-center justify-center mx-auto">
+            <FileText className="w-6 h-6" />
+          </div>
+          <div>
+            <h2 className="text-lg font-bold text-[#0b2853]">No Active Applications Found</h2>
+            <p className="text-xs text-slate-600 mt-1 max-w-md mx-auto">
+              You do not have any active scholarship or fellowship applications under your citizen account (<strong>{currentUser.email}</strong>).
+            </p>
+          </div>
+          <div>
+            <Link
+              to="/applicant/apply"
+              className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-[#0b2853] hover:bg-[#134685] text-white text-xs font-bold rounded shadow uppercase tracking-wider transition-colors"
+            >
+              <Upload className="w-4 h-4" />
+              <span>Apply for a Scholarship Scheme</span>
+            </Link>
+          </div>
+        </div>
+      );
+    }
+
+    // Has active draft but no submitted applications yet
     return (
-      <div className="bg-white p-8 rounded-lg border border-slate-300 shadow-sm text-center space-y-4">
-        <div className="w-12 h-12 bg-blue-50 border border-blue-200 text-[#0b2853] rounded-full flex items-center justify-center mx-auto">
-          <FileText className="w-6 h-6" />
-        </div>
-        <div>
-          <h2 className="text-lg font-bold text-[#0b2853]">No Active Applications Found</h2>
-          <p className="text-xs text-slate-600 mt-1 max-w-md mx-auto">
-            You do not have any active scholarship or fellowship applications under your citizen account (<strong>{currentUser.email}</strong>).
-          </p>
-        </div>
-        <div>
+      <div className="space-y-6">
+        <div className="bg-white p-5 rounded border border-slate-300 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">
+                Citizen Application Portal
+              </span>
+              <span className="text-slate-300">|</span>
+              <span className="text-xs font-semibold text-emerald-700 flex items-center gap-1">
+                <ShieldCheck className="w-3.5 h-3.5" /> Authenticated Citizen
+              </span>
+            </div>
+            <h1 className="text-xl sm:text-2xl font-black text-[#0b2853] tracking-tight">
+              Welcome, {currentUser.name}
+            </h1>
+            <p className="text-xs text-slate-600 mt-0.5">
+              Account: <strong>{currentUser.email}</strong> • Status: <strong>Draft Application in Progress</strong>
+            </p>
+          </div>
+
           <Link
             to="/applicant/apply"
-            className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-[#0b2853] hover:bg-[#134685] text-white text-xs font-bold rounded shadow uppercase tracking-wider transition-colors"
+            className="px-3.5 py-2 bg-[#0b2853] hover:bg-[#134685] text-white text-xs font-bold rounded shadow-sm flex items-center gap-1.5 self-start md:self-auto"
           >
-            <Upload className="w-4 h-4" />
-            <span>Apply for a Scholarship Scheme</span>
+            <FileText className="w-3.5 h-3.5" />
+            <span>Apply for Another Scheme</span>
           </Link>
+        </div>
+
+        {/* Dedicated Draft in Progress Card */}
+        <div className="bg-gradient-to-r from-amber-50 to-blue-50 border-2 border-amber-400 rounded-lg p-5 shadow-sm space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <div className="p-2.5 bg-amber-500 text-white rounded-lg shadow-sm">
+                <Clock className="w-6 h-6" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-black uppercase tracking-wider bg-amber-200 text-amber-900 px-2 py-0.5 rounded">
+                    Draft in Progress
+                  </span>
+                  <span className="text-slate-400 text-xs">•</span>
+                  <span className="text-xs font-mono font-bold text-slate-700">
+                    ID: {activeDraft.id}
+                  </span>
+                </div>
+                <h3 className="text-base font-extrabold text-[#0b2853] mt-1">
+                  {activeDraft.schemeName || 'MoTA Scholarship Scheme'}
+                </h3>
+                <p className="text-xs text-slate-600 mt-0.5 flex flex-wrap items-center gap-2">
+                  <span>Current Progress: <strong>Step {activeDraft.currentStep || 1} of 8 ({STEP_LABELS[activeDraft.currentStep || 1] || 'In Progress'})</strong></span>
+                  <span className="text-slate-300">•</span>
+                  <span>Last Saved: <strong>{activeDraft.lastUpdated || 'Today'}</strong></span>
+                </p>
+                <p className="text-[11px] text-slate-500 mt-1">
+                  Your partial application is safely stored in MongoDB Atlas (<code className="font-semibold text-slate-700">tsfms.applications</code>). You can continue whenever you are ready.
+                </p>
+              </div>
+            </div>
+
+            <Link
+              to={`/applicant/apply?scheme=${activeDraft.schemeCode || activeDraft.schemeId}&draftId=${activeDraft.id}`}
+              className="px-5 py-2.5 bg-[#0b2853] hover:bg-[#134685] text-white text-xs font-bold rounded shadow-md flex items-center justify-center gap-2 self-start sm:self-center transition-colors flex-shrink-0"
+            >
+              <span>Continue Application</span>
+              <ArrowRight className="w-4 h-4" />
+            </Link>
+          </div>
         </div>
       </div>
     );
@@ -146,6 +235,49 @@ export const ApplicantDashboardPage: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {/* DRAFT APPLICATION IN PROGRESS CARD (WHEN BOTH DRAFT AND SUBMITTED EXIST) */}
+      {activeDraft && (
+        <div className="bg-gradient-to-r from-amber-50 to-blue-50 border-2 border-amber-400 rounded-lg p-5 shadow-sm space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <div className="p-2.5 bg-amber-500 text-white rounded-lg shadow-sm">
+                <Clock className="w-6 h-6" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-black uppercase tracking-wider bg-amber-200 text-amber-900 px-2 py-0.5 rounded">
+                    Draft in Progress
+                  </span>
+                  <span className="text-slate-400 text-xs">•</span>
+                  <span className="text-xs font-mono font-bold text-slate-700">
+                    ID: {activeDraft.id}
+                  </span>
+                </div>
+                <h3 className="text-base font-extrabold text-[#0b2853] mt-1">
+                  {activeDraft.schemeName || 'MoTA Scholarship Scheme'}
+                </h3>
+                <p className="text-xs text-slate-600 mt-0.5 flex flex-wrap items-center gap-2">
+                  <span>Current Progress: <strong>Step {activeDraft.currentStep || 1} of 8 ({STEP_LABELS[activeDraft.currentStep || 1] || 'In Progress'})</strong></span>
+                  <span className="text-slate-300">•</span>
+                  <span>Last Saved: <strong>{activeDraft.lastUpdated || 'Today'}</strong></span>
+                </p>
+                <p className="text-[11px] text-slate-500 mt-1">
+                  Stored directly in MongoDB Atlas (<code className="font-semibold text-slate-700">tsfms.applications</code>). You can continue whenever you are ready.
+                </p>
+              </div>
+            </div>
+
+            <Link
+              to={`/applicant/apply?scheme=${activeDraft.schemeCode || activeDraft.schemeId}&draftId=${activeDraft.id}`}
+              className="px-5 py-2.5 bg-[#0b2853] hover:bg-[#134685] text-white text-xs font-bold rounded shadow-md flex items-center justify-center gap-2 self-start sm:self-center transition-colors flex-shrink-0"
+            >
+              <span>Continue Application</span>
+              <ArrowRight className="w-4 h-4" />
+            </Link>
+          </div>
+        </div>
+      )}
 
       {/* DEFICIENCY DETECTED HIGH PRIORITY BANNER */}
       {app.hasDeficiency && (

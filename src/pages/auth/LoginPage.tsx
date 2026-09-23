@@ -36,7 +36,29 @@ export const LoginPage: React.FC = () => {
         navigate(from === '/login' || from === '/signup' ? '/applicant/dashboard' : from);
       }
     } catch (err: any) {
-      setErrorMessage(err.message || 'Login failed. Please check your credentials and try again.');
+      if (
+        err?.isNetworkError ||
+        err?.status === 0 ||
+        err?.message?.toLowerCase().includes('failed to fetch') ||
+        err?.message?.toLowerCase().includes('unable to connect')
+      ) {
+        setErrorMessage('Unable to connect to the portal server. Please check your network connection and ensure the backend service is running on port 8000.');
+      } else if (
+        err?.status === 401 ||
+        err?.message?.toLowerCase().includes('invalid email') ||
+        err?.message?.toLowerCase().includes('credentials')
+      ) {
+        setErrorMessage('Invalid email or password. Please verify your credentials and try again.');
+      } else if (
+        err?.status === 403 ||
+        err?.message?.toLowerCase().includes('deactivated')
+      ) {
+        setErrorMessage('Your citizen account is currently deactivated. Please contact the MoTA support desk.');
+      } else if (err?.status >= 500) {
+        setErrorMessage('The portal authentication service is temporarily unavailable. Please try again shortly.');
+      } else {
+        setErrorMessage(err.message || 'Login failed. Please check your credentials and try again.');
+      }
     } finally {
       setIsSubmitting(false);
     }

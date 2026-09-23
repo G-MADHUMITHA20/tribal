@@ -12,6 +12,13 @@ interface DocumentOcrViewerProps {
   documentId?: string;
   fileName?: string;
   isLiveUpload?: boolean;
+  ocrVerification?: {
+    status: string;
+    message?: string;
+    detectedType?: string;
+    confidence?: number;
+    extractedFields?: Record<string, string | null>;
+  };
 }
 
 export const DocumentOcrViewer: React.FC<DocumentOcrViewerProps> = ({
@@ -21,7 +28,8 @@ export const DocumentOcrViewer: React.FC<DocumentOcrViewerProps> = ({
   isDeficientScenario = false,
   documentId,
   fileName,
-  isLiveUpload = false
+  isLiveUpload = false,
+  ocrVerification
 }) => {
   const result: DocumentVerificationResult = simulateDocumentOcr(
     documentType,
@@ -29,6 +37,11 @@ export const DocumentOcrViewer: React.FC<DocumentOcrViewerProps> = ({
     declaredIncome,
     isDeficientScenario
   );
+
+  const displayCertNumber = ocrVerification?.extractedFields?.certificate_number || result.certificateNumber || 'N/A';
+  const displayIssuingAuthority = ocrVerification?.extractedFields?.issuing_authority || result.issuingAuthority || 'Competent Authority';
+  const isTypeMismatch = ocrVerification?.status === 'TYPE_MISMATCH';
+  const isTypeMatch = ocrVerification?.status === 'TYPE_MATCH';
 
   const [activeView, setActiveView] = useState<'FIELDS' | 'OCR_TEXT'>('FIELDS');
   const [isDownloading, setIsDownloading] = useState<boolean>(false);
@@ -66,7 +79,7 @@ export const DocumentOcrViewer: React.FC<DocumentOcrViewerProps> = ({
               {result.documentTitle}
             </span>
             <span className="text-[10px] text-slate-500 font-mono">
-              Cert No: {result.certificateNumber || 'N/A'} • {result.issuingAuthority}
+              Cert No: {displayCertNumber} • {displayIssuingAuthority}
             </span>
           </div>
         </div>
@@ -86,7 +99,17 @@ export const DocumentOcrViewer: React.FC<DocumentOcrViewerProps> = ({
           )}
 
           {/* Status Badge */}
-          {isLiveUpload ? (
+          {isTypeMismatch ? (
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-800 font-bold text-[11px] animate-pulse">
+              <AlertTriangle className="w-3.5 h-3.5" />
+              TYPE MISMATCH
+            </span>
+          ) : isTypeMatch ? (
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold text-[11px]">
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              AI OCR VERIFIED (PASS)
+            </span>
+          ) : isLiveUpload ? (
             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-900 font-bold text-[11px]">
               <ShieldCheck className="w-3.5 h-3.5" />
               PENDING AI VERIFICATION

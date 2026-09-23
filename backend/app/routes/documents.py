@@ -6,9 +6,16 @@ from fastapi.responses import FileResponse
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from app.database.mongodb import get_database
 from app.core.security import get_current_user
-from app.schemas.document import DocumentType, DocumentMetadata, DocumentUploadResponse
+from app.schemas.document import (
+    DocumentType,
+    DocumentMetadata,
+    DocumentUploadResponse,
+    DocumentTypeVerificationResponse,
+    VerificationStatus
+)
 from app.services.file_validator import validate_uploaded_file
 from app.services.storage_service import storage_service
+from app.services.ocr_service import verify_document_content
 
 router = APIRouter(prefix="/documents", tags=["Documents"])
 
@@ -32,8 +39,40 @@ def serialize_document_metadata(doc: dict) -> DocumentMetadata:
         superseded_by=doc.get("superseded_by"),
         version=doc.get("version", 1),
         download_url=f"/api/documents/{doc.get('document_id') or doc.get('_id')}/file",
+        ocr_processed=doc.get("ocr_processed", False),
+        detected_document_type=doc.get("detected_document_type"),
+        classification_confidence=doc.get("classification_confidence"),
+        verification_status=doc.get("verification_status"),
+        verification_message=doc.get("verification_message"),
         created_at=doc.get("created_at") or datetime.now(timezone.utc)
     )
+
+@router.post("/verify-type", response_model=DocumentTypeVerificationResponse)
+async def verify_document_type_endpoint(
+    required_document_type: str = Form(..., description="Required document type code e.g. ST_CERTIFICATE"),
+    file: UploadFile = File(..., description="Document file to inspect"),
+    application_id: Optional[str] = Form(None),
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Inspect an uploaded document binary and run real OCR classification to detect
+    whether it matches the statutory required document type before full submission.
+    """
+    file_bytes = await file.read()
+    safe_filename, validated_mime = validate_uploaded_file(
+        file_bytes=file_bytes,
+        filename=file.filename or f"{required_document_type}.pdf",
+        content_type=file.content_type or "application/octet-stream"
+    )
+
+    verification = verify_document_content(
+        file_bytes=file_bytes,
+        filename=safe_filename,
+        content_type=validated_mime,
+        required_document_type=required_document_type
+    )
+
+    return DocumentTypeVerificationResponse(**verification)
 
 @router.post("/upload", response_model=DocumentUploadResponse, status_code=status.HTTP_201_CREATED)
 async def upload_document(
@@ -47,6 +86,7 @@ async def upload_document(
     Register and securely store uploaded document binary and metadata.
     Enforces server-side validation: size <= 5MB, non-empty, magic byte checks.
     Enforces application ownership for applicants.
+    Executes real OCR & document-type classification. Rejects high-confidence mismatches.
     """
     user_id = current_user["_id"]
     user_role = current_user.get("role")
@@ -75,7 +115,28 @@ async def upload_document(
     )
     file_size = len(file_bytes)
 
-    # 4. Generate unique ID and save binary to secure local storage
+    # 4. Real OCR & Document-Type Verification
+    verification = verify_document_content(
+        file_bytes=file_bytes,
+        filename=safe_filename,
+        content_type=validated_mime,
+        required_document_type=document_type.value
+    )
+
+    # Reject high-confidence type mismatch (e.g. Income Certificate uploaded as ST Certificate)
+    if verification["match_status"] == VerificationStatus.TYPE_MISMATCH.value:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "error": "DOCUMENT_TYPE_MISMATCH",
+                "message": verification["message"],
+                "required_type": verification["required_document_type"],
+                "detected_type": verification["detected_document_type"],
+                "confidence": verification["confidence"]
+            }
+        )
+
+    # 5. Generate unique ID and save binary to secure local storage
     doc_id = "DOC-" + uuid.uuid4().hex[:10].upper()
     now = datetime.now(timezone.utc)
 
@@ -87,7 +148,7 @@ async def upload_document(
     )
     storage_path = f"local://storage/documents/{storage_key}"
 
-    # 5. Insert document metadata into MongoDB Atlas 'documents' collection
+    # 6. Insert document metadata into MongoDB Atlas 'documents' collection
     doc_record = {
         "_id": doc_id,
         "document_id": doc_id,
@@ -100,7 +161,13 @@ async def upload_document(
         "storage_provider": "LOCAL_STORAGE",
         "storage_path": storage_path,
         "storage_key": storage_key,
-        "status": "UPLOADED",
+        "status": "OCR_VERIFIED" if verification["is_acceptable"] else "MANUAL_REVIEW",
+        "ocr_processed": True,
+        "detected_document_type": verification["detected_document_type"],
+        "classification_confidence": verification["confidence"],
+        "verification_status": verification["match_status"],
+        "verification_message": verification["message"],
+        "extracted_fields": verification.get("extracted_fields", {}),
         "is_active": True,
         "version": 1,
         "superseded_by": None,
@@ -108,7 +175,7 @@ async def upload_document(
     }
     await db["documents"].insert_one(doc_record)
 
-    # 6. Update application's embedded document registry
+    # 7. Update application's embedded document registry
     app_doc_entry = {
         "id": doc_id,
         "document_code": document_type.value,
@@ -116,7 +183,9 @@ async def upload_document(
         "file_name": safe_filename,
         "file_url": f"/api/documents/{doc_id}/file",
         "file_size_kb": max(1, file_size // 1024),
-        "status": "VALID",
+        "status": "VALID" if verification["match_status"] == VerificationStatus.TYPE_MATCH.value else "PENDING",
+        "ocr_extracted": True,
+        "verification_status": verification["match_status"],
         "uploaded_at": now
     }
     
@@ -130,7 +199,7 @@ async def upload_document(
         {"$set": {"documents": updated_docs, "updated_at": now}}
     )
 
-    # 7. Record statutory audit trail in 'audit_logs'
+    # 8. Record statutory audit trail in 'audit_logs'
     audit_entry = {
         "id": "AUD-" + uuid.uuid4().hex[:8].upper(),
         "timestamp": now,
@@ -140,7 +209,7 @@ async def upload_document(
         "application_id": application_id,
         "document_id": doc_id,
         "document_type": document_type.value,
-        "remarks": f"Document '{safe_filename}' ({max(1, file_size // 1024)} KB) uploaded and verified.",
+        "remarks": f"Document '{safe_filename}' ({max(1, file_size // 1024)} KB) uploaded. OCR status: {verification['match_status']}.",
         "ip_address": "127.0.0.1"
     }
     await db["audit_logs"].insert_one(audit_entry)
@@ -154,7 +223,11 @@ async def upload_document(
         storage_path=storage_path,
         storage_key=storage_key,
         download_url=f"/api/documents/{doc_id}/file",
-        message="Document uploaded, binary securely stored, and metadata registered.",
+        ocr_processed=True,
+        detected_document_type=verification["detected_document_type"],
+        classification_confidence=verification["confidence"],
+        verification_status=verification["match_status"],
+        message=verification["message"],
         uploaded_at=now
     )
 
@@ -201,9 +274,8 @@ async def get_document_file(
     db: AsyncIOMotorDatabase = Depends(get_database)
 ):
     """
-    Securely stream the uploaded binary file content with appropriate MIME headers.
-    Enforces role authorization: Applicant owns the document/application; Officers/Admins have review rights.
-    Guards against path traversal and unauthorized direct object references.
+    Securely stream the binary file content of a document.
+    Enforces authorization check.
     """
     user_id = current_user["_id"]
     user_role = current_user.get("role")
@@ -212,10 +284,9 @@ async def get_document_file(
     if not doc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Document '{document_id}' not found."
+            detail=f"Document '{document_id}' does not exist."
         )
 
-    # Authorization verification
     if user_role == "APPLICANT":
         if doc.get("user_id") != user_id:
             app = await db["applications"].find_one({"_id": doc.get("application_id")})
@@ -266,7 +337,7 @@ async def replace_document(
     """
     Replace a deficient or rejected document with a fresh submission.
     Preserves audit history: marks old document as SUPERSEDED (is_active=False),
-    stores new document binary, and updates the application status to RESUBMITTED.
+    validates new document via OCR, stores new binary, and updates status to RESUBMITTED.
     """
     user_id = current_user["_id"]
     user_role = current_user.get("role")
@@ -303,7 +374,28 @@ async def replace_document(
     )
     file_size = len(file_bytes)
 
-    # 4. Save new binary
+    # 4. OCR verification of replacement document
+    expected_type = old_doc.get("document_type")
+    verification = verify_document_content(
+        file_bytes=file_bytes,
+        filename=safe_filename,
+        content_type=validated_mime,
+        required_document_type=expected_type
+    )
+
+    if verification["match_status"] == VerificationStatus.TYPE_MISMATCH.value:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "error": "DOCUMENT_TYPE_MISMATCH",
+                "message": verification["message"],
+                "required_type": verification["required_document_type"],
+                "detected_type": verification["detected_document_type"],
+                "confidence": verification["confidence"]
+            }
+        )
+
+    # 5. Save new binary
     new_doc_id = "DOC-" + uuid.uuid4().hex[:10].upper()
     now = datetime.now(timezone.utc)
     new_version = old_doc.get("version", 1) + 1
@@ -316,7 +408,7 @@ async def replace_document(
     )
     storage_path = f"local://storage/documents/{storage_key}"
 
-    # 5. Mark old document as SUPERSEDED
+    # 6. Mark old document as SUPERSEDED
     await db["documents"].update_one(
         {"_id": document_id},
         {"$set": {
@@ -327,20 +419,26 @@ async def replace_document(
         }}
     )
 
-    # 6. Insert new document
+    # 7. Insert new document
     new_doc_record = {
         "_id": new_doc_id,
         "document_id": new_doc_id,
         "application_id": application_id,
         "user_id": user_id,
-        "document_type": old_doc.get("document_type"),
+        "document_type": expected_type,
         "file_name": safe_filename,
         "file_size_bytes": file_size,
         "content_type": validated_mime,
         "storage_provider": "LOCAL_STORAGE",
         "storage_path": storage_path,
         "storage_key": storage_key,
-        "status": "UPLOADED",
+        "status": "OCR_VERIFIED" if verification["is_acceptable"] else "MANUAL_REVIEW",
+        "ocr_processed": True,
+        "detected_document_type": verification["detected_document_type"],
+        "classification_confidence": verification["confidence"],
+        "verification_status": verification["match_status"],
+        "verification_message": verification["message"],
+        "extracted_fields": verification.get("extracted_fields", {}),
         "is_active": True,
         "version": new_version,
         "superseded_by": None,
@@ -348,20 +446,22 @@ async def replace_document(
     }
     await db["documents"].insert_one(new_doc_record)
 
-    # 7. Update application state: mark as RESUBMITTED, clear deficiency flag
+    # 8. Update application state: mark as RESUBMITTED, clear deficiency flag
     app_doc_entry = {
         "id": new_doc_id,
-        "document_code": old_doc.get("document_type"),
+        "document_code": expected_type,
         "document_name": safe_filename,
         "file_name": safe_filename,
         "file_url": f"/api/documents/{new_doc_id}/file",
         "file_size_kb": max(1, file_size // 1024),
-        "status": "VALID",
+        "status": "VALID" if verification["match_status"] == VerificationStatus.TYPE_MATCH.value else "PENDING",
+        "ocr_extracted": True,
+        "verification_status": verification["match_status"],
         "uploaded_at": now
     }
 
     existing_docs = application.get("documents", [])
-    updated_docs = [d for d in existing_docs if d.get("document_code") != old_doc.get("document_type")]
+    updated_docs = [d for d in existing_docs if d.get("document_code") != expected_type]
     updated_docs.append(app_doc_entry)
 
     await db["applications"].update_one(
@@ -375,7 +475,7 @@ async def replace_document(
         }}
     )
 
-    # 8. Record audit trail
+    # 9. Record audit trail
     audit_entry = {
         "id": "AUD-" + uuid.uuid4().hex[:8].upper(),
         "timestamp": now,
@@ -384,7 +484,7 @@ async def replace_document(
         "action": "DOCUMENT_RESUBMITTED",
         "application_id": application_id,
         "document_id": new_doc_id,
-        "remarks": f"Replacement document '{safe_filename}' uploaded for deficiency rectification (v{new_version}). Previous doc {document_id} superseded.",
+        "remarks": f"Replacement document '{safe_filename}' uploaded for deficiency rectification (v{new_version}). OCR: {verification['match_status']}.",
         "ip_address": "127.0.0.1"
     }
     await db["audit_logs"].insert_one(audit_entry)
@@ -392,13 +492,17 @@ async def replace_document(
     return DocumentUploadResponse(
         document_id=new_doc_id,
         application_id=application_id,
-        document_type=DocumentType(old_doc.get("document_type")),
+        document_type=DocumentType(expected_type),
         file_name=safe_filename,
         file_size_bytes=file_size,
         storage_path=storage_path,
         storage_key=storage_key,
         download_url=f"/api/documents/{new_doc_id}/file",
-        message="Replacement document uploaded and old document safely archived.",
+        ocr_processed=True,
+        detected_document_type=verification["detected_document_type"],
+        classification_confidence=verification["confidence"],
+        verification_status=verification["match_status"],
+        message=verification["message"],
         uploaded_at=now
     )
 

@@ -7,6 +7,7 @@ export type ApplicationStatus =
   | 'SELECTION'
   | 'APPROVED'
   | 'DEFICIENT'
+  | 'DEFICIENCY_NOTIFIED'
   | 'RESUBMITTED'
   | 'REJECTED';
 
@@ -83,6 +84,7 @@ export interface ApplicationRecord {
   submissionDate: string;
   lastUpdated: string;
   currentStageIndex: number;
+  currentStep?: number;
   status: ApplicationStatus;
   applicant: ApplicantProfile;
   academic: AcademicDetails;
@@ -92,7 +94,7 @@ export interface ApplicationRecord {
   hasDeficiency: boolean;
   deficiencyNotes?: string;
   aiEligibilityResult?: {
-    overallStatus: 'ELIGIBLE' | 'NOT_ELIGIBLE' | 'FLAGGED_DEFICIENCY';
+    overallStatus: 'ELIGIBLE' | 'NOT_ELIGIBLE' | 'FLAGGED_DEFICIENCY' | 'MORE_INFO_REQUIRED';
     confidenceScore: number;
     ruleMatches: {
       ruleId: string;

@@ -28,8 +28,8 @@ class DatabaseManager:
         try:
             self.client = AsyncIOMotorClient(
                 settings.MONGO_URI,
-                serverSelectionTimeoutMS=2000,
-                connectTimeoutMS=2000
+                serverSelectionTimeoutMS=5000,
+                connectTimeoutMS=5000
             )
             self.db = self.client[settings.MONGO_DB_NAME]
             self.is_connected = False

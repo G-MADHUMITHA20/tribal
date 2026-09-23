@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
-import { Search, Eye, User, LogIn, UserPlus, LogOut, LayoutDashboard, Bell, X, CheckCircle2 } from 'lucide-react';
+import { Search, Eye, User, LogIn, UserPlus, LogOut, LayoutDashboard, Bell, X, CheckCircle2, RotateCcw } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 
 export const GovHeader: React.FC = () => {
