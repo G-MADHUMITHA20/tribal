@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import { SchemeConfig } from '../../types/scheme';
+import { getSchemeWindowStatus } from '../../utils/schemeWindow';
 import { ApplicationRecord } from '../../types/application';
 import { DocumentOcrViewer } from '../../components/document-ai/DocumentOcrViewer';
 import { ExplainableEvidenceCard } from '../../components/document-ai/ExplainableEvidenceCard';
@@ -338,6 +339,15 @@ export const ApplicationWizardPage: React.FC = () => {
           (currentUser?.email && a.applicant.email?.toLowerCase() === currentUser.email.toLowerCase()))
     );
 
+    // Submission guard: Enforce deadline ONLY if it's a NEW application
+    if (!existingAppForScheme || existingAppForScheme.status === 'DRAFT') {
+      const windowStatus = getSchemeWindowStatus(selectedScheme);
+      if (!windowStatus.isOpen) {
+        alert(`Application submission failed: ${windowStatus.message}`);
+        return;
+      }
+    }
+
     if (existingAppForScheme && !['DRAFT', 'DEFICIENCY_NOTIFIED'].includes(existingAppForScheme.status)) {
       alert('Your application is already submitted and locked.');
       return;
@@ -634,6 +644,33 @@ export const ApplicationWizardPage: React.FC = () => {
   );
 
   const isLocked = existingAppForSchemeLockCheck && !['DRAFT', 'DEFICIENCY_NOTIFIED'].includes(existingAppForSchemeLockCheck.status);
+  
+  const windowStatus = getSchemeWindowStatus(selectedScheme);
+
+  // Application creation guard: block UI completely if it's a new application and window is closed
+  if (!existingAppForSchemeLockCheck && !windowStatus.isOpen && !isSubmittedSuccess) {
+    return (
+      <div className="bg-white p-8 rounded border border-slate-300 shadow-md text-center max-w-2xl mx-auto space-y-4 my-8">
+        <div className="w-16 h-16 rounded-full bg-rose-100 text-rose-700 flex items-center justify-center mx-auto">
+          <XCircle className="w-10 h-10" />
+        </div>
+        <h2 className="text-2xl font-black text-[#0b2853]">
+          {windowStatus.state === 'NOT_STARTED' ? 'Applications Not Yet Open' : 'Applications Closed'}
+        </h2>
+        <p className="text-sm text-slate-600 leading-relaxed max-w-md mx-auto">
+          {windowStatus.message}
+        </p>
+        <div className="pt-4">
+          <button
+            onClick={() => navigate('/schemes')}
+            className="px-5 py-2.5 bg-[#0b2853] hover:bg-[#134685] text-white font-bold text-xs rounded shadow flex items-center gap-1.5 mx-auto"
+          >
+            <span>Browse Schemes</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (isLocked && !isSubmittedSuccess) {
     return (

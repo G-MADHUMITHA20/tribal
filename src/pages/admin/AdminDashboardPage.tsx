@@ -9,9 +9,11 @@ import {
   Award,
   Wallet,
   ShieldAlert,
-  ArrowRight
+  ArrowRight,
+  Calendar
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { getSchemeWindowStatus } from '../../utils/schemeWindow';
 import {
   ResponsiveContainer,
   BarChart,
@@ -66,15 +68,19 @@ export const AdminDashboardPage: React.FC = () => {
     { name: 'Rejected', value: 1, color: '#64748b' }
   ];
 
-  // Chart 4: Monthly Intake Trend
-  const dataMonthly = [
-    { month: 'Apr', intake: 12000, verified: 10500 },
-    { month: 'May', intake: 28000, verified: 26000 },
-    { month: 'Jun', intake: 65000, verified: 62000 },
-    { month: 'Jul', intake: 98000, verified: 94000 },
-    { month: 'Aug', intake: 115000, verified: 110000 },
-    { month: 'Sep', intake: 66210, verified: 62500 }
-  ];
+  // Scheme Deadlines
+  const schemeDeadlines = schemes.map(s => {
+    const status = getSchemeWindowStatus(s);
+    const schemeApps = applications.filter(a => a.schemeCode === s.code || a.schemeId === s.id).length;
+    return {
+      id: s.id,
+      name: s.shortName || s.name,
+      code: s.code,
+      deadline: s.applicationDeadline || 'No Deadline',
+      apps: schemeApps,
+      status
+    };
+  });
 
   return (
     <div className="space-y-6">
@@ -225,24 +231,50 @@ export const AdminDashboardPage: React.FC = () => {
 
       {/* Row 2 Charts: State-wise Distribution + Monthly Volume */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* State-wise applications */}
+        {/* Scheme Application Windows */}
         <div className="bg-white p-4 rounded border border-slate-300 shadow-sm">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-              State / UT-wise ST Beneficiary Outreach
+            <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+              <Calendar className="w-4 h-4 text-blue-800" />
+              Scheme Application Windows
             </h3>
-            <span className="text-[11px] text-slate-500">Top Tribal States</span>
           </div>
-          <div className="h-60">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={dataByState} layout="vertical" margin={{ top: 5, right: 20, left: 40, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                <XAxis type="number" tick={{ fontSize: 10 }} />
-                <YAxis dataKey="state" type="category" tick={{ fontSize: 10 }} width={75} />
-                <Tooltip formatter={(v: any) => Number(v).toLocaleString('en-IN')} />
-                <Bar dataKey="applications" fill="#0284c7" radius={[0, 4, 4, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+          <div className="h-60 overflow-y-auto pr-2 space-y-3">
+            {schemeDeadlines.map((sd) => (
+              <div key={sd.id} className="p-3 rounded border border-slate-200 bg-slate-50 flex items-center justify-between">
+                <div>
+                  <h4 className="text-sm font-bold text-[#0b2853] mb-0.5">{sd.name}</h4>
+                  <div className="flex items-center gap-3 text-[11px] text-slate-500 font-medium">
+                    <span>{sd.apps} Applications</span>
+                    {sd.deadline !== 'No Deadline' && (
+                      <span>Deadline: {sd.deadline}</span>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  {sd.status.state === 'OPEN' && (
+                    <span className="px-2 py-1 bg-emerald-100 text-emerald-800 text-[10px] font-bold rounded">
+                      OPEN
+                    </span>
+                  )}
+                  {sd.status.state === 'CLOSING_SOON' && (
+                    <span className="px-2 py-1 bg-amber-100 text-amber-800 text-[10px] font-bold rounded">
+                      CLOSING SOON
+                    </span>
+                  )}
+                  {sd.status.state === 'NOT_STARTED' && (
+                    <span className="px-2 py-1 bg-slate-200 text-slate-700 text-[10px] font-bold rounded">
+                      NOT OPEN YET
+                    </span>
+                  )}
+                  {sd.status.state === 'CLOSED' && (
+                    <span className="px-2 py-1 bg-rose-100 text-rose-800 text-[10px] font-bold rounded">
+                      CLOSED
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
 

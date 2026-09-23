@@ -1,5 +1,6 @@
 import React from 'react';
 import { SchemeConfig } from '../../types/scheme';
+import { getSchemeWindowStatus } from '../../utils/schemeWindow';
 import { Link } from 'react-router-dom';
 import {
   GraduationCap,
@@ -20,6 +21,8 @@ interface SchemeCardProps {
 }
 
 export const SchemeCard: React.FC<SchemeCardProps> = ({ scheme, onOpenPreCheck }) => {
+  const windowStatus = getSchemeWindowStatus(scheme);
+
   // Category-specific icons and colors
   const getCategoryIcon = () => {
     switch (scheme.category) {
@@ -48,16 +51,29 @@ export const SchemeCard: React.FC<SchemeCardProps> = ({ scheme, onOpenPreCheck }
           {scheme.portalCategory}
         </span>
         
-        {scheme.isOpen ? (
-          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+        {windowStatus.state === 'OPEN' ? (
+          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200" title={windowStatus.message}>
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-            PORTAL OPEN
+            OPEN
+          </span>
+        ) : windowStatus.state === 'CLOSING_SOON' ? (
+          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200" title={windowStatus.message}>
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+            CLOSING SOON
+          </span>
+        ) : windowStatus.state === 'NOT_STARTED' ? (
+          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded border border-slate-200" title={windowStatus.message}>
+            NOT YET OPEN
           </span>
         ) : (
-          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded border border-rose-200" title={windowStatus.message}>
             CLOSED
           </span>
         )}
+      </div>
+
+      <div className="px-4 pt-2 text-[10px] font-bold text-center text-slate-500 bg-slate-50 border-b border-slate-100">
+        {windowStatus.message}
       </div>
 
       {/* Main Content */}
@@ -137,13 +153,23 @@ export const SchemeCard: React.FC<SchemeCardProps> = ({ scheme, onOpenPreCheck }
           >
             Details
           </Link>
-          <Link
-            to={`/applicant/apply?scheme=${scheme.id}`}
-            className="flex-1 sm:flex-none text-center text-xs font-bold text-white bg-[#0b2853] hover:bg-[#134685] px-3 py-1.5 rounded shadow-sm flex items-center justify-center gap-1 transition-colors"
-          >
-            <span>Apply Now</span>
-            <ArrowRight className="w-3 h-3" />
-          </Link>
+          {windowStatus.isOpen ? (
+            <Link
+              to={`/applicant/apply?scheme=${scheme.id}`}
+              className="flex-1 sm:flex-none text-center text-xs font-bold text-white bg-[#0b2853] hover:bg-[#134685] px-3 py-1.5 rounded shadow-sm flex items-center justify-center gap-1 transition-colors"
+            >
+              <span>Apply Now</span>
+              <ArrowRight className="w-3 h-3" />
+            </Link>
+          ) : (
+            <button
+              disabled
+              className="flex-1 sm:flex-none text-center text-xs font-bold text-slate-400 bg-slate-100 border border-slate-200 px-3 py-1.5 rounded cursor-not-allowed"
+              title={windowStatus.message}
+            >
+              Closed
+            </button>
+          )}
         </div>
       </div>
     </div>

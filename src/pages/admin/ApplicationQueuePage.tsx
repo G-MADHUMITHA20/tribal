@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { api } from '../../services/api';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { getSchemeWindowStatus } from '../../utils/schemeWindow';
 
 export const ApplicationQueuePage: React.FC = () => {
   const { applications, schemes, updateApplicationStatus, addAuditLog, currentUser } = useApp();
@@ -86,6 +87,7 @@ export const ApplicationQueuePage: React.FC = () => {
       const schemeApps = applications.filter(a => a.schemeCode === s.code || a.schemeId === s.id);
       return {
         scheme: s,
+        windowStatus: getSchemeWindowStatus(s),
         total: schemeApps.length,
         draft: schemeApps.filter(a => a.status === 'DRAFT').length,
         submitted: schemeApps.filter(a => ['SUBMITTED', 'RESUBMITTED'].includes(a.status)).length,
@@ -159,8 +161,16 @@ export const ApplicationQueuePage: React.FC = () => {
                 className="bg-white border border-slate-300 rounded p-4 shadow-sm hover:shadow-md hover:border-blue-400 cursor-pointer transition-all flex flex-col h-full"
               >
                 <div className="flex-1">
-                  <div className="text-[10px] font-mono font-bold text-slate-500 mb-1">{stat.scheme.code}</div>
-                  <h3 className="font-bold text-blue-950 mb-2 line-clamp-2">{stat.scheme.name}</h3>
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="text-[10px] font-mono font-bold text-slate-500">{stat.scheme.code}</div>
+                    <div className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${stat.windowStatus.state === 'OPEN' ? 'bg-emerald-100 text-emerald-800' : stat.windowStatus.state === 'CLOSING_SOON' ? 'bg-amber-100 text-amber-800' : stat.windowStatus.state === 'NOT_STARTED' ? 'bg-slate-200 text-slate-700' : 'bg-rose-100 text-rose-800'}`}>
+                      {stat.windowStatus.state === 'OPEN' ? 'OPEN' : stat.windowStatus.state === 'CLOSING_SOON' ? 'CLOSING SOON' : stat.windowStatus.state === 'NOT_STARTED' ? 'NOT OPEN' : 'CLOSED'}
+                    </div>
+                  </div>
+                  <h3 className="font-bold text-blue-950 mb-1 line-clamp-2">{stat.scheme.name}</h3>
+                  <div className="text-[10px] text-slate-500 mb-2">
+                    {stat.scheme.applicationDeadline ? `Deadline: ${stat.scheme.applicationDeadline}` : 'No Deadline'}
+                  </div>
                 </div>
                 
                 <div className="mt-4 grid grid-cols-2 gap-2 text-xs">

@@ -27,6 +27,7 @@ export const SchemeConfiguratorPage: React.FC = () => {
   const [tagline, setTagline] = useState<string>(scheme.tagline);
   const [annualIncomeCap, setAnnualIncomeCap] = useState<number>(scheme.annualIncomeCap);
   const [minAcademicPercentage, setMinAcademicPercentage] = useState<number>(scheme.minAcademicPercentage || 45);
+  const [applicationStartDate, setApplicationStartDate] = useState<string>(scheme.applicationStartDate || '');
   const [applicationDeadline, setApplicationDeadline] = useState<string>(scheme.applicationDeadline);
   const [isOpen, setIsOpen] = useState<boolean>(scheme.isOpen);
 
@@ -56,6 +57,7 @@ export const SchemeConfiguratorPage: React.FC = () => {
       setTagline(s.tagline);
       setAnnualIncomeCap(s.annualIncomeCap);
       setMinAcademicPercentage(s.minAcademicPercentage || 45);
+      setApplicationStartDate(s.applicationStartDate || '');
       setApplicationDeadline(s.applicationDeadline);
       setIsOpen(s.isOpen);
       setRules(s.eligibilityRules);
@@ -101,6 +103,7 @@ export const SchemeConfiguratorPage: React.FC = () => {
       tagline,
       annualIncomeCap: Number(annualIncomeCap),
       minAcademicPercentage: Number(minAcademicPercentage),
+      applicationStartDate: applicationStartDate || undefined,
       applicationDeadline,
       isOpen,
       eligibilityRules: rules
@@ -258,10 +261,22 @@ export const SchemeConfiguratorPage: React.FC = () => {
           </div>
 
           <div>
+            <label className="block font-bold text-slate-700 mb-1">Application Start Date:</label>
+            <input
+              type="date"
+              disabled={isProtected}
+              value={applicationStartDate}
+              onChange={(e) => setApplicationStartDate(e.target.value)}
+              className="w-full p-2 bg-slate-50 border border-slate-300 rounded font-mono disabled:opacity-60"
+            />
+          </div>
+
+          <div>
             <label className="block font-bold text-slate-700 mb-1">Application Deadline:</label>
             <input
               type="date"
               disabled={isProtected}
+              min={applicationStartDate}
               value={applicationDeadline}
               onChange={(e) => setApplicationDeadline(e.target.value)}
               className="w-full p-2 bg-slate-50 border border-slate-300 rounded font-mono disabled:opacity-60"

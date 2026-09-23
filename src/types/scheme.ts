@@ -63,6 +63,7 @@ export interface SchemeConfig {
   isOpen: boolean;
   isDatasetOriginal?: boolean;
   academicYear: string;
+  applicationStartDate?: string;
   applicationDeadline: string;
   targetCommunity: string; // "Scheduled Tribes (ST)"
   annualIncomeCap: number; // in INR, 0 if no cap
