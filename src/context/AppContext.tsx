@@ -36,6 +36,7 @@ interface AppContextType {
   highContrast: boolean;
   toggleHighContrast: () => void;
 
+
   // Schemes (Dynamic Configuration)
   schemes: SchemeConfig[];
   isLoadingSchemes: boolean;
@@ -66,7 +67,7 @@ interface AppContextType {
   addGrievance: (g: Omit<GrievanceRecord, 'id' | 'submittedDate'>) => Promise<void>;
   updateGrievanceStatus: (id: string, status: GrievanceRecord['status'], remarks?: string) => Promise<void>;
 }
- 
+
 function transformBackendScheme(backendScheme: any): SchemeConfig {
   const fallback = MOTA_SCHEMES.find(
     (s) => s.id === backendScheme.id || s.code === backendScheme.code
@@ -219,25 +220,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const currentUser: UserSession = authUser
     ? {
-        id: authUser.id,
-        name: authUser.name,
-        email: authUser.email,
-        role: authUser.role,
-        designation:
-          authUser.role === 'APPLICANT'
-            ? 'ST Beneficiary (Aadhaar Verified)'
-            : authUser.role === 'OFFICER'
+      id: authUser.id,
+      name: authUser.name,
+      email: authUser.email,
+      role: authUser.role,
+      designation:
+        authUser.role === 'APPLICANT'
+          ? 'ST Beneficiary (Aadhaar Verified)'
+          : authUser.role === 'OFFICER'
             ? 'Deputy Secretary (Research & Scrutiny)'
             : 'Joint Secretary (Scholarships & DBT Mission)',
-        department: authUser.role !== 'APPLICANT' ? 'Ministry of Tribal Affairs' : undefined,
-      }
+      department: authUser.role !== 'APPLICANT' ? 'Ministry of Tribal Affairs' : undefined,
+    }
     : {
-        id: '',
-        name: 'Guest Citizen',
-        email: '',
-        role: 'APPLICANT',
-        designation: 'Unauthenticated Visitor',
-      };
+      id: '',
+      name: 'Guest Citizen',
+      email: '',
+      role: 'APPLICANT',
+      designation: 'Unauthenticated Visitor',
+    };
 
   const [language, setLanguage] = useState<'EN' | 'HI'>('EN');
   const [fontSizeMultiplier, setFontSizeMultiplier] = useState<number>(1);
@@ -504,7 +505,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const created = await api.createApplication(payload);
       const transformed = transformBackendApplication(created);
       setApplications((prev) => [transformed, ...prev]);
-      
+
       // Log application started
       addAuditLog({
         actor: app.applicant.fullName,
@@ -518,7 +519,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         reason: `Initiated application for ${app.schemeName}`,
         ipAddress: '164.100.24.112'
       });
-      
+
       // Log application submitted
       addAuditLog({
         actor: app.applicant.fullName,
@@ -537,7 +538,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       console.error('Failed to create application on server:', err);
       // Still update locally if offline
       setApplications((prev) => [app, ...prev]);
-      
+
       addAuditLog({
         actor: app.applicant.fullName,
         role: 'APPLICANT',
@@ -550,7 +551,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         reason: `Initiated application for ${app.schemeName}`,
         ipAddress: '164.100.24.112'
       });
-      
+
       addAuditLog({
         actor: app.applicant.fullName,
         role: 'APPLICANT',
@@ -608,7 +609,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         // Attempt backend document replacement
         await api.replaceDocument(deficientDoc.id, file);
       }
-      
+
       await api.updateApplication(appId, {
         status: 'RESUBMITTED',
       });
@@ -622,12 +623,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const updatedDocs = app.documents.map((d) =>
             d.status === 'DEFICIENT'
               ? {
-                  ...d,
-                  fileName: updatedDocName,
-                  status: 'VALID' as const,
-                  deficiencyReason: undefined,
-                  uploadedAt: new Date().toISOString().substring(0, 10)
-                }
+                ...d,
+                fileName: updatedDocName,
+                status: 'VALID' as const,
+                deficiencyReason: undefined,
+                uploadedAt: new Date().toISOString().substring(0, 10)
+              }
               : d
           );
 
@@ -643,7 +644,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return app;
       })
     );
-    
+
     // Log resubmission
     const app = applications.find(a => a.id === appId);
     if (app) {
@@ -683,16 +684,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return auditLogs
       .filter(log => ['Application Started', 'New Application Submitted', 'Application Submitted', 'Application Resubmitted'].includes(log.action))
       .map(log => ({
-         id: log.id,
-         title: log.action === 'Application Started' ? 'New application started' :
-                log.action === 'Application Resubmitted' ? 'Application resubmitted' :
-                'Application submitted for review',
-         description: `By ${log.actor}`,
-         schemeCode: log.schemeCode,
-         applicationId: log.applicationId,
-         timestamp: log.timestamp,
-         isRead: readNotificationIds.has(log.id),
-         actionType: log.action
+        id: log.id,
+        title: log.action === 'Application Started' ? 'New application started' :
+          log.action === 'Application Resubmitted' ? 'Application resubmitted' :
+            'Application submitted for review',
+        description: `By ${log.actor}`,
+        schemeCode: log.schemeCode,
+        applicationId: log.applicationId,
+        timestamp: log.timestamp,
+        isRead: readNotificationIds.has(log.id),
+        actionType: log.action
       }));
   }, [auditLogs, readNotificationIds]);
 
@@ -736,11 +737,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // NEVER fall back to applications[0] or another applicant's record!
   const currentApplicantApplication = authUser
     ? applications.find(
-        (a) =>
-          a.applicant.id === authUser.id ||
-          (authUser.email && a.applicant.email.toLowerCase() === authUser.email.toLowerCase()) ||
-          (authUser.name && a.applicant.fullName.toLowerCase() === authUser.name.toLowerCase())
-      )
+      (a) =>
+        a.applicant.id === authUser.id ||
+        (authUser.email && a.applicant.email.toLowerCase() === authUser.email.toLowerCase()) ||
+        (authUser.name && a.applicant.fullName.toLowerCase() === authUser.name.toLowerCase())
+    )
     : undefined;
 
   return (
@@ -790,3 +791,4 @@ export const useApp = () => {
   }
   return context;
 };
+
