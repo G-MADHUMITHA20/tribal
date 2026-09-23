@@ -27,40 +27,35 @@ import {
   Line,
   CartesianGrid
 } from 'recharts';
+import { formatDistanceToNow } from 'date-fns';
 
 export const AdminDashboardPage: React.FC = () => {
-  const { applications, grievances, schemes } = useApp();
+  const { applications, schemes, auditLogs } = useApp();
 
   // Metrics calculation
-  const totalApps = 384210; // Demo population scale
-  const pendingVerification = applications.filter((a) => a.status === 'DOCUMENT_VERIFICATION' || a.status === 'SUBMITTED' || a.status === 'RESUBMITTED').length + 420;
-  const eligibleCount = applications.filter((a) => a.status === 'ELIGIBILITY_VERIFICATION' || a.status === 'SCRUTINY' || a.status === 'SELECTION').length + 1850;
-  const deficientCount = applications.filter((a) => a.hasDeficiency || a.status === 'DEFICIENT').length + 312;
-  const selectedCount = applications.filter((a) => a.status === 'SELECTION' || a.status === 'APPROVED').length + 940;
-  const disbursedCount = applications.filter((a) => a.status === 'APPROVED').length + 382000;
-  const pendingOfficerActions = applications.filter((a) => a.status === 'DOCUMENT_VERIFICATION' || a.status === 'ELIGIBILITY_VERIFICATION' || a.status === 'SCRUTINY' || a.status === 'SELECTION').length;
+  const totalApps = applications.length;
+  const pendingVerification = applications.filter((a) => ['DOCUMENT_VERIFICATION', 'SUBMITTED', 'RESUBMITTED'].includes(a.status)).length;
+  const eligibleCount = applications.filter((a) => ['ELIGIBILITY_VERIFICATION', 'SCRUTINY', 'SELECTION'].includes(a.status)).length;
+  const deficientCount = applications.filter((a) => a.hasDeficiency || a.status === 'DEFICIENT').length;
+  const selectedCount = applications.filter((a) => ['SELECTION', 'APPROVED'].includes(a.status)).length;
+  const disbursedCount = applications.filter((a) => a.status === 'APPROVED').length;
+  const rejectedCount = applications.filter((a) => a.status === 'REJECTED').length;
+  const pendingOfficerActions = applications.filter((a) => ['DOCUMENT_VERIFICATION', 'ELIGIBILITY_VERIFICATION', 'SCRUTINY', 'SELECTION'].includes(a.status)).length;
 
   // Chart 1: Applications by Scheme
-  const dataByScheme = [
-    { name: 'Pre-Matric ST', applications: 142000, sanctioned: 139500 },
-    { name: 'Post-Matric ST', applications: 228000, sanctioned: 221000 },
-    { name: 'National Scholarship', applications: 4800, sanctioned: 1000 },
-    { name: 'National Fellowship', applications: 3900, sanctioned: 750 },
-    { name: 'National Overseas', applications: 450, sanctioned: 20 },
-    { name: 'DBT Direct Grants', applications: 76000, sanctioned: 74500 }
-  ];
+  const dataByScheme = schemes.map(s => {
+    const schemeApps = applications.filter(a => a.schemeCode === s.code || a.schemeId === s.id);
+    return {
+      name: s.shortName || s.name,
+      applications: schemeApps.length,
+      sanctioned: schemeApps.filter(a => a.status === 'APPROVED').length
+    };
+  });
 
-  // Chart 2: Applications by State/UT
-  const dataByState = [
-    { state: 'Jharkhand', applications: 68400 },
-    { state: 'Madhya Pradesh', applications: 74200 },
-    { state: 'Odisha', applications: 61800 },
-    { state: 'Chhattisgarh', applications: 49500 },
-    { state: 'Maharashtra', applications: 38200 },
-    { state: 'Assam & NE', applications: 44100 },
-    { state: 'Gujarat', applications: 28900 },
-    { state: 'Rajasthan', applications: 19110 }
-  ];
+  // Recent Activity
+  const recentActivity = auditLogs
+    .filter(log => ['Application Started', 'New Application Submitted', 'Application Submitted', 'Application Resubmitted', 'Application Approved', 'Application Rejected'].includes(log.action))
+    .slice(0, 8);
 
   // Chart 3: Application Status Funnel / Outcome
   const dataStatusPie = [
@@ -142,7 +137,7 @@ export const AdminDashboardPage: React.FC = () => {
 
         <div className="bg-white p-3 rounded border border-slate-300 shadow-sm border-t-4 border-t-slate-500">
           <span className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Rejected</span>
-          <div className="text-lg font-black text-slate-700">142</div>
+          <div className="text-lg font-black text-slate-700">{rejectedCount}</div>
           <span className="text-[9px] text-slate-500">Non-ST/Cap</span>
         </div>
 
@@ -251,26 +246,46 @@ export const AdminDashboardPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Monthly intake trajectory */}
+        {/* Monthly intake trajectory replaced with Recent Activity */}
         <div className="bg-white p-4 rounded border border-slate-300 shadow-sm">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-              Monthly Intake vs AI Verification Trajectory
+              Recent Application Activity
             </h3>
-            <span className="text-[11px] text-emerald-700 font-bold">98.2% Auto-Scrutiny</span>
+            <span className="text-[11px] text-emerald-700 font-bold">Real-time Stream</span>
           </div>
-          <div className="h-60">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={dataMonthly} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                <XAxis dataKey="month" tick={{ fontSize: 10 }} />
-                <YAxis tick={{ fontSize: 10 }} />
-                <Tooltip formatter={(v: any) => Number(v).toLocaleString('en-IN')} />
-                <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Line type="monotone" dataKey="intake" name="Submitted" stroke="#134685" strokeWidth={2} dot={{ r: 3 }} />
-                <Line type="monotone" dataKey="verified" name="OCR Verified" stroke="#10b981" strokeWidth={2} dot={{ r: 3 }} />
-              </LineChart>
-            </ResponsiveContainer>
+          <div className="h-60 overflow-y-auto pr-2">
+            {recentActivity.length === 0 ? (
+              <div className="flex items-center justify-center h-full text-slate-500 text-sm">
+                No recent activity recorded.
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {recentActivity.map(log => (
+                  <div key={log.id} className="flex gap-3 text-sm">
+                    <div className="mt-0.5">
+                      {log.action.includes('Started') ? <UserPlus className="w-4 h-4 text-blue-500" /> :
+                       log.action.includes('Resubmitted') ? <RotateCcw className="w-4 h-4 text-amber-500" /> :
+                       log.action.includes('Submitted') ? <FileText className="w-4 h-4 text-slate-500" /> :
+                       log.action.includes('Approved') ? <CheckCircle2 className="w-4 h-4 text-emerald-500" /> :
+                       <XCircle className="w-4 h-4 text-rose-500" />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-slate-800 truncate">{log.action}</p>
+                      <p className="text-xs text-slate-500">
+                        {log.actor} • <span className="font-mono text-blue-800">{log.applicationId}</span>
+                      </p>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        {log.schemeCode}
+                      </p>
+                    </div>
+                    <div className="text-[10px] text-slate-400 whitespace-nowrap">
+                      {log.timestamp.substring(11, 16)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>

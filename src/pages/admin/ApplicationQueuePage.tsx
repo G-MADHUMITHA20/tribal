@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { ApplicationRecord } from '../../types/application';
 import { DocumentOcrViewer } from '../../components/document-ai/DocumentOcrViewer';
@@ -19,9 +19,12 @@ import {
   Download
 } from 'lucide-react';
 import { api } from '../../services/api';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 export const ApplicationQueuePage: React.FC = () => {
-  const { applications, schemes, updateApplicationStatus, currentUser } = useApp();
+  const { applications, schemes, updateApplicationStatus, addAuditLog, currentUser } = useApp();
+  const location = useLocation();
+  const navigate = useNavigate();
 
   const [selectedSchemeId, setSelectedSchemeId] = useState<string | null>(null);
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('ALL');
@@ -30,10 +33,29 @@ export const ApplicationQueuePage: React.FC = () => {
 
   // Action dialog states
   const [officerRemarksInput, setOfficerRemarksInput] = useState<string>('');
+  const [confirmActionType, setConfirmActionType] = useState<'APPROVE' | 'REJECT' | null>(null);
 
   const selectedScheme = useMemo(() => {
     return schemes.find(s => s.id === selectedSchemeId || s.code === selectedSchemeId) || null;
   }, [schemes, selectedSchemeId]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const schemeCode = params.get('scheme');
+    const appId = params.get('app');
+
+    if (schemeCode && schemes.length > 0) {
+      setSelectedSchemeId(schemeCode);
+      if (appId && applications.length > 0) {
+        const appToInspect = applications.find(a => a.id === appId && (a.schemeCode === schemeCode || a.schemeId === schemeCode));
+        if (appToInspect) {
+          setInspectingApp(appToInspect);
+          // Optional: clear params so refresh doesn't reopen if closed
+          navigate('/admin/applications', { replace: true });
+        }
+      }
+    }
+  }, [location.search, schemes, applications, navigate]);
 
   const filteredApps = useMemo(() => {
     if (!selectedScheme) return [];
@@ -76,9 +98,27 @@ export const ApplicationQueuePage: React.FC = () => {
 
   const handleAction = (status: ApplicationRecord['status'], remarks: string) => {
     if (!inspectingApp) return;
+    
     updateApplicationStatus(inspectingApp.id, status, remarks, currentUser.name);
+    
+    if (status === 'APPROVED' || status === 'REJECTED') {
+      addAuditLog({
+        actor: currentUser.name,
+        role: currentUser.role,
+        action: status === 'APPROVED' ? 'Application Approved' : 'Application Rejected',
+        applicationId: inspectingApp.id,
+        schemeCode: inspectingApp.schemeCode,
+        previousStatus: inspectingApp.status,
+        newStatus: status,
+        remarks: remarks,
+        reason: remarks,
+        ipAddress: '10.14.88.22'
+      });
+    }
+    
     setInspectingApp(null);
     setOfficerRemarksInput('');
+    setConfirmActionType(null);
   };
 
   return (
@@ -506,14 +546,15 @@ export const ApplicationQueuePage: React.FC = () => {
                 )}
 
                 {/* Reject - Available before terminal state */}
-                {!['APPROVED', 'REJECTED'].includes(inspectingApp.status) && (
+                {!['APPROVED', 'REJECTED', 'DRAFT'].includes(inspectingApp.status) && (
                   <button
-                    onClick={() =>
-                      handleAction(
-                        'REJECTED',
-                        officerRemarksInput || 'Application does not meet statutory eligibility guidelines.'
-                      )
-                    }
+                    onClick={() => {
+                      if (!officerRemarksInput.trim()) {
+                        alert("Rejection reason is required. Please provide a reason in the remarks field.");
+                        return;
+                      }
+                      setConfirmActionType('REJECT');
+                    }}
                     className="px-3.5 py-2 bg-rose-700 hover:bg-rose-800 text-white font-bold rounded shadow-sm flex items-center gap-1.5"
                   >
                     <XCircle className="w-4 h-4" />
@@ -576,12 +617,7 @@ export const ApplicationQueuePage: React.FC = () => {
                   </button>
                 ) : inspectingApp.status === 'SELECTION' ? (
                   <button
-                    onClick={() =>
-                      handleAction(
-                        'APPROVED',
-                        officerRemarksInput || 'Sanction ratified by Competent Sanctioning Authority.'
-                      )
-                    }
+                    onClick={() => setConfirmActionType('APPROVE')}
                     className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded shadow-sm flex items-center gap-1.5"
                   >
                     <CheckCircle className="w-4 h-4" />
@@ -590,6 +626,51 @@ export const ApplicationQueuePage: React.FC = () => {
                 ) : null}
               </div>
             </div>
+
+            {/* Confirmation Dialog Overlay */}
+            {confirmActionType && (
+              <div className="absolute inset-0 z-50 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4">
+                <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
+                  <h3 className="text-lg font-black text-[#0b2853] mb-4">
+                    {confirmActionType === 'APPROVE' ? 'Approve this application?' : 'Reject this application?'}
+                  </h3>
+                  <div className="space-y-2 mb-6 text-sm text-slate-700 bg-slate-50 p-4 rounded border border-slate-200">
+                    <p><strong>Applicant:</strong> {inspectingApp.applicant.fullName}</p>
+                    <p><strong>Scheme:</strong> {inspectingApp.schemeName}</p>
+                    <p><strong>Application ID:</strong> <span className="font-mono text-blue-900 font-bold">{inspectingApp.id}</span></p>
+                    <p><strong>Current Status:</strong> {inspectingApp.status.replace(/_/g, ' ')}</p>
+                    {confirmActionType === 'REJECT' && (
+                      <p className="mt-2 pt-2 border-t border-slate-300">
+                        <strong className="text-rose-700 block mb-1">Rejection Reason:</strong> 
+                        {officerRemarksInput}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex justify-end gap-3">
+                    <button
+                      onClick={() => setConfirmActionType(null)}
+                      className="px-4 py-2 border border-slate-300 rounded text-slate-700 font-bold hover:bg-slate-50"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (confirmActionType === 'APPROVE') {
+                           handleAction('APPROVED', officerRemarksInput || 'Sanction ratified by Competent Sanctioning Authority.');
+                        } else {
+                           handleAction('REJECTED', officerRemarksInput);
+                        }
+                      }}
+                      className={`px-4 py-2 text-white font-bold rounded shadow-sm ${
+                        confirmActionType === 'APPROVE' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-rose-600 hover:bg-rose-700'
+                      }`}
+                    >
+                      {confirmActionType === 'APPROVE' ? 'Confirm Approval' : 'Confirm Rejection'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

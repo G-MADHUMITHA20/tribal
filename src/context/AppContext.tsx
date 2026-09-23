@@ -8,6 +8,17 @@ import { INITIAL_GRIEVANCES, GrievanceRecord } from '../data/mockGrievances';
 import { useAuth } from './AuthContext';
 import { api } from '../services/api';
 
+export interface AdminNotification {
+  id: string;
+  title: string;
+  description: string;
+  schemeCode: string;
+  applicationId: string;
+  timestamp: string;
+  isRead: boolean;
+  actionType: string;
+}
+
 interface AppContextType {
   // Authentication & Role
   currentUser: UserSession;
@@ -45,6 +56,10 @@ interface AppContextType {
   // Audit Logs
   auditLogs: SystemAuditLog[];
   addAuditLog: (log: Omit<SystemAuditLog, 'id' | 'timestamp'>) => void;
+
+  // Notifications
+  adminNotifications: AdminNotification[];
+  markNotificationAsRead: (id: string) => void;
 
   // Grievances
   grievances: GrievanceRecord[];
@@ -233,6 +248,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isLoadingApplications, setIsLoadingApplications] = useState<boolean>(false);
   const [applicationError, setApplicationError] = useState<string | null>(null);
   const [auditLogs, setAuditLogs] = useState<SystemAuditLog[]>(INITIAL_AUDIT_LOGS);
+  const [readNotificationIds, setReadNotificationIds] = useState<Set<string>>(new Set());
   const [grievances, setGrievances] = useState<GrievanceRecord[]>([]);
 
   // Fetch schemes from backend MongoDB Atlas
@@ -488,10 +504,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const created = await api.createApplication(payload);
       const transformed = transformBackendApplication(created);
       setApplications((prev) => [transformed, ...prev]);
+      
+      // Log application started
       addAuditLog({
         actor: app.applicant.fullName,
         role: 'APPLICANT',
-        action: 'New Application Submitted',
+        action: 'Application Started',
+        applicationId: transformed.id,
+        schemeCode: app.schemeCode,
+        previousStatus: 'DRAFT',
+        newStatus: 'DRAFT',
+        remarks: `Initiated application for ${app.schemeName}`,
+        reason: `Initiated application for ${app.schemeName}`,
+        ipAddress: '164.100.24.112'
+      });
+      
+      // Log application submitted
+      addAuditLog({
+        actor: app.applicant.fullName,
+        role: 'APPLICANT',
+        action: 'Application Submitted',
         applicationId: transformed.id,
         schemeCode: app.schemeCode,
         previousStatus: 'DRAFT',
@@ -505,10 +537,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       console.error('Failed to create application on server:', err);
       // Still update locally if offline
       setApplications((prev) => [app, ...prev]);
+      
       addAuditLog({
         actor: app.applicant.fullName,
         role: 'APPLICANT',
-        action: 'New Application Submitted',
+        action: 'Application Started',
+        applicationId: app.id,
+        schemeCode: app.schemeCode,
+        previousStatus: 'DRAFT',
+        newStatus: 'DRAFT',
+        remarks: `Initiated application for ${app.schemeName}`,
+        reason: `Initiated application for ${app.schemeName}`,
+        ipAddress: '164.100.24.112'
+      });
+      
+      addAuditLog({
+        actor: app.applicant.fullName,
+        role: 'APPLICANT',
+        action: 'Application Submitted',
         applicationId: app.id,
         schemeCode: app.schemeCode,
         previousStatus: 'DRAFT',
@@ -597,6 +643,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return app;
       })
     );
+    
+    // Log resubmission
+    const app = applications.find(a => a.id === appId);
+    if (app) {
+      addAuditLog({
+        actor: currentUser.name,
+        role: currentUser.role,
+        action: 'Application Resubmitted',
+        applicationId: appId,
+        schemeCode: app.schemeCode,
+        previousStatus: 'DEFICIENT',
+        newStatus: 'RESUBMITTED',
+        remarks: `Deficiency corrected and resubmitted by applicant.`,
+        reason: `Deficiency corrected`,
+        ipAddress: '164.100.24.112'
+      });
+    }
   };
 
   const addAuditLog = (log: Omit<SystemAuditLog, 'id' | 'timestamp'>) => {
@@ -607,6 +670,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
     setAuditLogs((prev) => [newRecord, ...prev]);
   };
+
+  const markNotificationAsRead = (id: string) => {
+    setReadNotificationIds(prev => {
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
+  };
+
+  const adminNotifications: AdminNotification[] = React.useMemo(() => {
+    return auditLogs
+      .filter(log => ['Application Started', 'New Application Submitted', 'Application Submitted', 'Application Resubmitted'].includes(log.action))
+      .map(log => ({
+         id: log.id,
+         title: log.action === 'Application Started' ? 'New application started' :
+                log.action === 'Application Resubmitted' ? 'Application resubmitted' :
+                'Application submitted for review',
+         description: `By ${log.actor}`,
+         schemeCode: log.schemeCode,
+         applicationId: log.applicationId,
+         timestamp: log.timestamp,
+         isRead: readNotificationIds.has(log.id),
+         actionType: log.action
+      }));
+  }, [auditLogs, readNotificationIds]);
 
   const addGrievance = async (g: Omit<GrievanceRecord, 'id' | 'submittedDate'>) => {
     try {
@@ -683,6 +771,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         resolveApplicationDeficiency,
         auditLogs,
         addAuditLog,
+        adminNotifications,
+        markNotificationAsRead,
         grievances,
         addGrievance,
         updateGrievanceStatus
