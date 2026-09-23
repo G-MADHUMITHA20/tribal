@@ -44,6 +44,11 @@ export const ApplicationQueuePage: React.FC = () => {
     const params = new URLSearchParams(location.search);
     const schemeCode = params.get('scheme');
     const appId = params.get('app');
+    const statusParam = params.get('status');
+
+    if (statusParam) {
+      setSelectedStatusFilter(statusParam);
+    }
 
     if (schemeCode && schemes.length > 0) {
       setSelectedSchemeId(schemeCode);
@@ -52,7 +57,7 @@ export const ApplicationQueuePage: React.FC = () => {
         if (appToInspect) {
           setInspectingApp(appToInspect);
           // Optional: clear params so refresh doesn't reopen if closed
-          navigate('/admin/applications', { replace: true });
+          navigate(`/admin/applications?scheme=${schemeCode}${statusParam ? `&status=${statusParam}` : ''}`, { replace: true });
         }
       }
     }

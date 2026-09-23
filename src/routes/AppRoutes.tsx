@@ -33,6 +33,7 @@ import { ApplicantGrievancesPage } from '../pages/applicant/ApplicantGrievancesP
 
 // Admin Pages
 import { AdminDashboardPage } from '../pages/admin/AdminDashboardPage';
+import { AdminSchemeDashboardPage } from '../pages/admin/AdminSchemeDashboardPage';
 import { ApplicationQueuePage } from '../pages/admin/ApplicationQueuePage';
 import { DocVerificationPage } from '../pages/admin/DocVerificationPage';
 import { SelectionBoardPage } from '../pages/admin/SelectionBoardPage';
@@ -84,6 +85,7 @@ export const AppRoutes: React.FC = () => {
         <Route element={<RoleRoute allowedRoles={['OFFICER', 'ADMIN']} />}>
           <Route path="/admin" element={<AdminLayout />}>
             <Route index element={<AdminDashboardPage />} />
+            <Route path="schemes/:schemeId" element={<AdminSchemeDashboardPage />} />
             <Route path="applications" element={<ApplicationQueuePage />} />
             <Route path="verification" element={<DocVerificationPage />} />
             <Route path="selection" element={<SelectionBoardPage />} />
