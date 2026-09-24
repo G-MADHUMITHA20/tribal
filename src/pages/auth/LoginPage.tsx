@@ -73,7 +73,7 @@ export const LoginPage: React.FC = () => {
             <img
               src="/images/mota-emblem.png"
               alt="Government of India emblem"
-              className="h-16 w-auto object-contain filter brightness-0 invert"
+              className="h-16 w-auto max-w-full object-contain bg-white px-2 py-1 rounded"
             />
           </div>
           <h2 className="text-xs font-bold uppercase tracking-widest text-slate-200">

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { UserRole, UserSession } from '../types/user';
 import { SchemeConfig } from '../types/scheme';
 import { ApplicationRecord, ApplicationStatus } from '../types/application';
@@ -7,6 +7,8 @@ import { INITIAL_AUDIT_LOGS, SystemAuditLog } from '../data/mockAuditLogs';
 import { INITIAL_GRIEVANCES, GrievanceRecord } from '../data/mockGrievances';
 import { useAuth } from './AuthContext';
 import { api } from '../services/api';
+import { en, phrases, TranslationKey } from '../data/translations/en';
+import { hi, hiPhrases } from '../data/translations/hi';
 
 export interface AdminNotification {
   id: string;
@@ -27,6 +29,7 @@ interface AppContextType {
   // Language
   language: 'EN' | 'HI';
   setLanguage: (lang: 'EN' | 'HI') => void;
+  t: (key: TranslationKey) => string;
 
   // Accessibility
   fontSizeMultiplier: number;
@@ -245,6 +248,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
   const [language, setLanguage] = useState<'EN' | 'HI'>('EN');
+  const translationTextNodes = useRef(new Map<Text, string>());
+  const translationAttributes = useRef(new Map<HTMLElement, Map<string, string>>());
   const [fontSizeMultiplier, setFontSizeMultiplier] = useState<number>(1);
   const [highContrast, setHighContrast] = useState<boolean>(false);
   const [schemes, setSchemes] = useState<SchemeConfig[]>(MOTA_SCHEMES);
@@ -255,6 +260,87 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [auditLogs, setAuditLogs] = useState<SystemAuditLog[]>(INITIAL_AUDIT_LOGS);
   const [readNotificationIds, setReadNotificationIds] = useState<Set<string>>(new Set());
   const [grievances, setGrievances] = useState<GrievanceRecord[]>([]);
+
+  const translations = language === 'HI' ? hi : en;
+  const t = (key: TranslationKey) => translations[key];
+
+  useEffect(() => {
+    const pairs = [
+      ...Object.keys(phrases).map((key) => [phrases[key as keyof typeof phrases], hiPhrases[key as keyof typeof hiPhrases]] as const),
+      ...Object.keys(en).map((key) => [en[key as TranslationKey], hi[key as TranslationKey]] as const),
+    ]
+      .filter(([english, hindi]) => english !== hindi)
+      .sort(([first], [second]) => second.length - first.length);
+
+    const translateText = (value: string) => pairs.reduce(
+      (result, [english, hindi]) => result.replaceAll(english, language === 'HI' ? hindi : english),
+      value
+    );
+    const restoreEnglishText = (value: string) => [...pairs]
+      .sort(([, firstHindi], [, secondHindi]) => secondHindi.length - firstHindi.length)
+      .reduce((result, [english, hindi]) => result.replaceAll(hindi, english), value);
+
+    const processTextNode = (node: Text) => {
+      const parent = node.parentElement;
+      if (!parent || ['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEXTAREA'].includes(parent.tagName)) return;
+      const trackedOriginal = translationTextNodes.current.get(node);
+      if (language === 'HI') {
+        if (trackedOriginal && node.nodeValue !== translateText(trackedOriginal) && node.nodeValue !== trackedOriginal) {
+          translationTextNodes.current.set(node, restoreEnglishText(node.nodeValue || ''));
+        } else if (!trackedOriginal) {
+          translationTextNodes.current.set(node, restoreEnglishText(node.nodeValue || ''));
+        }
+        const translatedValue = translateText(translationTextNodes.current.get(node) || '');
+        if (node.nodeValue !== translatedValue) node.nodeValue = translatedValue;
+      } else if (trackedOriginal !== undefined) {
+        if (node.nodeValue !== trackedOriginal) node.nodeValue = trackedOriginal;
+      }
+    };
+
+    const processElement = (element: HTMLElement) => {
+      const attributes = ['placeholder', 'title', 'aria-label', 'alt'];
+      let originals = translationAttributes.current.get(element);
+      if (!originals) {
+        originals = new Map<string, string>();
+        translationAttributes.current.set(element, originals);
+      }
+      attributes.forEach((attribute) => {
+        const value = element.getAttribute(attribute);
+        if (value === null) return;
+        const original = originals?.get(attribute);
+        if (language === 'HI') {
+          if (original && value !== translateText(original) && value !== original) originals?.set(attribute, restoreEnglishText(value));
+          if (!originals?.has(attribute)) originals?.set(attribute, restoreEnglishText(value));
+          const translatedValue = translateText(originals?.get(attribute) || '');
+          if (element.getAttribute(attribute) !== translatedValue) element.setAttribute(attribute, translatedValue);
+        } else if (original !== undefined) {
+          if (element.getAttribute(attribute) !== original) element.setAttribute(attribute, original);
+        }
+      });
+    };
+
+    const processTree = (root: Node) => {
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      let node = walker.nextNode() as Text | null;
+      while (node) {
+        processTextNode(node);
+        node = walker.nextNode() as Text | null;
+      }
+      if (root instanceof HTMLElement) processElement(root);
+      if (root instanceof Element) root.querySelectorAll<HTMLElement>('*').forEach(processElement);
+    };
+
+    document.documentElement.lang = language === 'HI' ? 'hi' : 'en';
+    processTree(document.body);
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        if (mutation.type === 'characterData' && mutation.target instanceof Text) processTextNode(mutation.target);
+        mutation.addedNodes.forEach(processTree);
+      });
+    });
+    observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+    return () => observer.disconnect();
+  }, [language]);
 
   // Fetch schemes from backend MongoDB Atlas
   const fetchSchemes = async () => {
@@ -809,6 +895,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         switchRole,
         language,
         setLanguage,
+        t,
         fontSizeMultiplier,
         increaseFontSize,
         decreaseFontSize,

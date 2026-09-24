@@ -1,18 +1,20 @@
 import React, { useState } from 'react';
 import { OFFICIAL_RESOURCES, ResourceItem } from '../../data/resources';
 import { FileText, Download, Calendar, Tag, ExternalLink, Search } from 'lucide-react';
+import { useApp } from '../../context/AppContext';
 
 export const ResourceSection: React.FC = () => {
+  const { language } = useApp();
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [searchTerm, setSearchTerm] = useState<string>('');
 
   const categories = [
-    { key: 'ALL', label: 'All Resources' },
-    { key: 'GUIDELINE', label: 'Guidelines & Amendments' },
-    { key: 'CIRCULAR', label: 'Circulars & Orders' },
-    { key: 'RESULT', label: 'Selection Results' },
-    { key: 'MANUAL', label: 'User Manuals' },
-    { key: 'NEWS', label: 'News & Press Releases' }
+    { key: 'ALL', label: language === 'HI' ? 'सभी संसाधन' : 'All Resources' },
+    { key: 'GUIDELINE', label: language === 'HI' ? 'दिशानिर्देश एवं संशोधन' : 'Guidelines & Amendments' },
+    { key: 'CIRCULAR', label: language === 'HI' ? 'परिपत्र एवं आदेश' : 'Circulars & Orders' },
+    { key: 'RESULT', label: language === 'HI' ? 'चयन परिणाम' : 'Selection Results' },
+    { key: 'MANUAL', label: language === 'HI' ? 'उपयोगकर्ता पुस्तिकाएं' : 'User Manuals' },
+    { key: 'NEWS', label: language === 'HI' ? 'समाचार एवं प्रेस विज्ञप्तियां' : 'News & Press Releases' }
   ];
 
   const filteredItems = OFFICIAL_RESOURCES.filter((res) => {
@@ -36,10 +38,10 @@ export const ResourceSection: React.FC = () => {
       <div className="bg-[#0b2853] text-white px-5 py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b-2 border-amber-500">
         <div>
           <h2 className="font-bold text-base tracking-wide uppercase">
-            Official Guidelines, Circulars & Selection Results
+            {language === 'HI' ? 'आधिकारिक दिशानिर्देश, परिपत्र एवं चयन परिणाम' : 'Official Guidelines, Circulars & Selection Results'}
           </h2>
           <p className="text-xs text-slate-300">
-            Authoritative documents, amendments, and notifications issued by Ministry of Tribal Affairs
+            {language === 'HI' ? 'जनजातीय कार्य मंत्रालय द्वारा जारी प्रामाणिक दस्तावेज़, संशोधन और अधिसूचनाएं' : 'Authoritative documents, amendments, and notifications issued by Ministry of Tribal Affairs'}
           </p>
         </div>
 
@@ -47,7 +49,7 @@ export const ResourceSection: React.FC = () => {
         <div className="relative w-full sm:w-64">
           <input
             type="text"
-            placeholder="Search circulars..."
+            placeholder={language === 'HI' ? 'परिपत्र खोजें...' : 'Search circulars...'}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-900/60 border border-slate-500 rounded text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-400"
@@ -82,16 +84,16 @@ export const ResourceSection: React.FC = () => {
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded bg-blue-100 text-blue-900 uppercase tracking-wider">
                     <Tag className="w-3 h-3" />
-                    {item.category}
+                    {language === 'HI' ? ({ GUIDELINE: 'दिशानिर्देश', CIRCULAR: 'परिपत्र', RESULT: 'परिणाम', MANUAL: 'पुस्तिका', NEWS: 'समाचार', ACHIEVEMENT: 'उपलब्धि' }[item.category]) : item.category}
                   </span>
                   {item.isNew && (
                     <span className="text-[10px] font-extrabold px-1.5 py-0.5 rounded bg-rose-600 text-white uppercase animate-pulse">
-                      NEW
+                      {language === 'HI' ? 'नया' : 'NEW'}
                     </span>
                   )}
                   {item.referenceNumber && (
                     <span className="text-[11px] font-medium text-slate-500">
-                      Ref: {item.referenceNumber}
+                      {language === 'HI' ? 'संदर्भ:' : 'Ref:'} {item.referenceNumber}
                     </span>
                   )}
                   <span className="text-[11px] text-slate-400 flex items-center gap-1">
@@ -101,10 +103,10 @@ export const ResourceSection: React.FC = () => {
                 </div>
 
                 <h4 className="text-sm font-bold text-[#0b2853] hover:text-blue-700 cursor-pointer">
-                  {item.title}
+                  {language === 'HI' ? item.titleHi : item.title}
                 </h4>
                 <p className="text-xs text-slate-600 leading-relaxed max-w-4xl">
-                  {item.description}
+                  {language === 'HI' ? item.descriptionHi : item.description}
                 </p>
               </div>
 
@@ -119,14 +121,14 @@ export const ResourceSection: React.FC = () => {
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-blue-50 text-blue-900 font-semibold text-xs border border-blue-300 rounded shadow-sm transition-colors"
                 >
                   <Download className="w-3.5 h-3.5 text-blue-800" />
-                  <span>Download {item.fileSize || 'PDF'}</span>
+                  <span>{language === 'HI' ? 'डाउनलोड' : 'Download'} {item.fileSize || 'PDF'}</span>
                 </a>
               </div>
             </div>
           ))
         ) : (
           <div className="p-8 text-center text-slate-500 text-xs">
-            No resources match the selected criteria.
+            {language === 'HI' ? 'चयनित मानदंड से कोई संसाधन मेल नहीं खाता।' : 'No resources match the selected criteria.'}
           </div>
         )}
       </div>
