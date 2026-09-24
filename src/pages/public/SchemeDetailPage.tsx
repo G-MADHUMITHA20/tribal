@@ -3,6 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import { getHindiScheme } from '../../data/translations/hi';
 import { EligibilityPreCheckModal } from '../../components/scheme/EligibilityPreCheckModal';
+import { getSchemeWindowStatus } from '../../utils/schemeWindow';
 import {
   ArrowLeft,
   Calendar,
@@ -31,6 +32,7 @@ export const SchemeDetailPage: React.FC = () => {
 
   const scheme = schemes.find((s) => s.id === id) || schemes[0];
   const displayedScheme = language === 'HI' ? getHindiScheme(scheme) : scheme;
+  const windowStatus = getSchemeWindowStatus(scheme);
   const [activeTab, setActiveTab] = useState<string>('overview');
   const [isPreCheckOpen, setIsPreCheckOpen] = useState<boolean>(false);
 
@@ -70,7 +72,7 @@ export const SchemeDetailPage: React.FC = () => {
                 <span className="bg-white/10 text-slate-200 text-[11px] font-medium px-2 py-0.5 rounded">
                   {displayedScheme.portalCategory}
                 </span>
-                {scheme.isOpen ? (
+                {windowStatus.isOpen ? (
                   <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 text-[11px] font-bold px-2 py-0.5 rounded flex items-center gap-1">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
                     Applications Open (AY {scheme.academicYear})
