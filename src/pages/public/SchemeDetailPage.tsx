@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
+import { getHindiScheme } from '../../data/translations/hi';
 import { EligibilityPreCheckModal } from '../../components/scheme/EligibilityPreCheckModal';
 import {
   ArrowLeft,
@@ -25,10 +26,11 @@ import {
 
 export const SchemeDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const { schemes } = useApp();
+  const { schemes, language } = useApp();
   const navigate = useNavigate();
 
   const scheme = schemes.find((s) => s.id === id) || schemes[0];
+  const displayedScheme = language === 'HI' ? getHindiScheme(scheme) : scheme;
   const [activeTab, setActiveTab] = useState<string>('overview');
   const [isPreCheckOpen, setIsPreCheckOpen] = useState<boolean>(false);
 
@@ -53,7 +55,7 @@ export const SchemeDetailPage: React.FC = () => {
           <span>Back to All Schemes</span>
         </Link>
         <span>/</span>
-        <span className="text-slate-700 font-semibold">{scheme.shortName}</span>
+        <span className="text-slate-700 font-semibold">{displayedScheme.shortName}</span>
       </div>
 
       {/* Scheme Header Card */}
@@ -66,7 +68,7 @@ export const SchemeDetailPage: React.FC = () => {
                   {scheme.code}
                 </span>
                 <span className="bg-white/10 text-slate-200 text-[11px] font-medium px-2 py-0.5 rounded">
-                  {scheme.portalCategory}
+                  {displayedScheme.portalCategory}
                 </span>
                 {scheme.isOpen ? (
                   <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 text-[11px] font-bold px-2 py-0.5 rounded flex items-center gap-1">
@@ -81,10 +83,10 @@ export const SchemeDetailPage: React.FC = () => {
               </div>
 
               <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight mb-1 text-white">
-                {scheme.name}
+                {displayedScheme.name}
               </h1>
               <p className="text-xs sm:text-sm text-slate-200 max-w-3xl leading-relaxed">
-                {scheme.tagline}
+                {displayedScheme.tagline}
               </p>
             </div>
 
@@ -165,7 +167,7 @@ export const SchemeDetailPage: React.FC = () => {
                   About the Scheme
                 </h3>
                 <p className="text-xs sm:text-sm text-slate-700 leading-relaxed">
-                  {scheme.description}
+                  {displayedScheme.description}
                 </p>
               </div>
 
@@ -174,7 +176,7 @@ export const SchemeDetailPage: React.FC = () => {
                   Summary of Key Features
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {scheme.eligibilitySummary.map((item, idx) => (
+                  {displayedScheme.eligibilitySummary.map((item, idx) => (
                     <div key={idx} className="flex items-start gap-2 bg-slate-50 p-3 rounded border border-slate-200 text-xs text-slate-700">
                       <CheckCircle className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />
                       <span>{item}</span>

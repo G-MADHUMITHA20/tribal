@@ -1,6 +1,8 @@
 import React from 'react';
 import { SchemeConfig } from '../../types/scheme';
 import { getSchemeWindowStatus } from '../../utils/schemeWindow';
+import { useApp } from '../../context/AppContext';
+import { getHindiScheme } from '../../data/translations/hi';
 import { Link } from 'react-router-dom';
 import {
   GraduationCap,
@@ -21,6 +23,8 @@ interface SchemeCardProps {
 }
 
 export const SchemeCard: React.FC<SchemeCardProps> = ({ scheme, onOpenPreCheck }) => {
+  const { language } = useApp();
+  const displayedScheme = language === 'HI' ? getHindiScheme(scheme) : scheme;
   const windowStatus = getSchemeWindowStatus(scheme);
 
   // Category-specific icons and colors
@@ -48,7 +52,7 @@ export const SchemeCard: React.FC<SchemeCardProps> = ({ scheme, onOpenPreCheck }
       {/* Top Banner / Category header */}
       <div className="bg-slate-50 px-4 py-2.5 border-b border-slate-200 flex items-center justify-between">
         <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wider bg-white px-2 py-0.5 rounded border border-slate-200">
-          {scheme.portalCategory}
+          {displayedScheme.portalCategory}
         </span>
         
         {windowStatus.state === 'OPEN' ? (
@@ -88,14 +92,14 @@ export const SchemeCard: React.FC<SchemeCardProps> = ({ scheme, onOpenPreCheck }
             </span>
             <h3 className="text-sm sm:text-base font-bold text-[#0b2853] leading-snug group-hover:text-blue-900">
               <Link to={`/schemes/${scheme.id}`}>
-                {scheme.name}
+                {displayedScheme.name}
               </Link>
             </h3>
           </div>
         </div>
 
         <p className="text-xs text-slate-600 line-clamp-2 mb-3 leading-relaxed">
-          {scheme.tagline}
+          {displayedScheme.tagline}
         </p>
 
         {/* Eligibility Snapshot Highlights */}
@@ -124,7 +128,7 @@ export const SchemeCard: React.FC<SchemeCardProps> = ({ scheme, onOpenPreCheck }
 
         {/* Eligibility checklist preview */}
         <div className="space-y-1 mb-2">
-          {scheme.eligibilitySummary.slice(0, 2).map((item, i) => (
+          {displayedScheme.eligibilitySummary.slice(0, 2).map((item, i) => (
             <div key={i} className="flex items-start gap-1.5 text-[11px] text-slate-600">
               <CheckCircle className="w-3 h-3 text-emerald-600 flex-shrink-0 mt-0.5" />
               <span className="line-clamp-1">{item}</span>
