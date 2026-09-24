@@ -78,6 +78,14 @@ function transformBackendScheme(backendScheme: any): SchemeConfig {
   const fallback = MOTA_SCHEMES.find(
     (s) => s.id === backendScheme.id || s.code === backendScheme.code
   );
+  const backendDeadline = backendScheme.application_deadline || backendScheme.applicationDeadline;
+  const fallbackDeadline = fallback?.applicationDeadline;
+  const hasExpiredLegacyDeadline = Boolean(
+    backendDeadline &&
+    fallbackDeadline &&
+    new Date(backendDeadline) < new Date() &&
+    new Date(fallbackDeadline) >= new Date()
+  );
 
   return {
     id: backendScheme.id || backendScheme._id || (fallback?.id ?? 'scheme-custom'),
@@ -91,7 +99,9 @@ function transformBackendScheme(backendScheme: any): SchemeConfig {
     isOpen: backendScheme.is_open !== undefined ? Boolean(backendScheme.is_open) : (backendScheme.isOpen !== undefined ? Boolean(backendScheme.isOpen) : (fallback?.isOpen ?? true)),
     isDatasetOriginal: backendScheme.is_dataset_original !== undefined ? Boolean(backendScheme.is_dataset_original) : (backendScheme.isDatasetOriginal !== undefined ? Boolean(backendScheme.isDatasetOriginal) : (fallback?.isDatasetOriginal ?? false)),
     academicYear: backendScheme.academic_year || backendScheme.academicYear || (fallback?.academicYear ?? '2025-2026'),
-    applicationDeadline: backendScheme.application_deadline || backendScheme.applicationDeadline || (fallback?.applicationDeadline ?? '2025-11-30'),
+    applicationDeadline: hasExpiredLegacyDeadline
+      ? fallbackDeadline
+      : (backendDeadline || fallbackDeadline || '2026-11-30'),
     targetCommunity: backendScheme.target_community || backendScheme.targetCommunity || (fallback?.targetCommunity ?? 'Scheduled Tribes (ST)'),
     annualIncomeCap: Number(backendScheme.annual_income_cap !== undefined ? backendScheme.annual_income_cap : (backendScheme.annualIncomeCap ?? fallback?.annualIncomeCap ?? 0)),
     minAge: backendScheme.min_age ?? backendScheme.minAge ?? fallback?.minAge,
