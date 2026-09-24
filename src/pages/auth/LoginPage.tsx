@@ -30,7 +30,7 @@ export const LoginPage: React.FC = () => {
     setIsSubmitting(true);
     try {
       const user = await login({ email: email.trim().toLowerCase(), password });
-      if (user.role === 'OFFICER' || user.role === 'ADMIN') {
+      if (user.role === 'ADMIN') {
         navigate('/admin');
       } else {
         navigate(from === '/login' || from === '/signup' ? '/applicant/dashboard' : from);
@@ -189,24 +189,6 @@ export const LoginPage: React.FC = () => {
               )}
             </button>
           </form>
-
-          {/* Quick Demo Credentials Help */}
-          <div className="bg-slate-50 border border-slate-200 rounded p-3 text-[11px] text-slate-600 space-y-1">
-            <span className="font-bold text-slate-800 block">
-              Default Government / Portal Accounts:
-            </span>
-            <div className="flex flex-col gap-0.5 font-mono text-[10px] text-slate-700">
-              <div>
-                <strong>Officer:</strong> officer@mota.gov.in / Officer@2026
-              </div>
-              <div>
-                <strong>Admin:</strong> admin@mota.gov.in / Admin@2026
-              </div>
-              <div>
-                <strong>Applicant:</strong> Register below or use your created email.
-              </div>
-            </div>
-          </div>
 
           {/* Sign Up Link */}
           <div className="pt-3 border-t border-slate-200 text-center text-xs text-slate-600">

@@ -1,7 +1,7 @@
 import React from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useApp } from '../../context/AppContext';
-import { ShieldCheck, User, UserCheck, Settings, LogIn } from 'lucide-react';
+import { User, UserCheck, Settings } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 
 export const RoleSwitcherBanner: React.FC = () => {
@@ -10,7 +10,7 @@ export const RoleSwitcherBanner: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
 
-  const handleRoleSwitch = async (role: 'APPLICANT' | 'OFFICER' | 'ADMIN') => {
+  const handleRoleSwitch = async (role: 'APPLICANT' | 'ADMIN') => {
     if (role === 'APPLICANT') {
       if (user?.role !== 'APPLICANT') {
         logout();
@@ -63,19 +63,6 @@ export const RoleSwitcherBanner: React.FC = () => {
           </button>
 
           <button
-            onClick={() => handleRoleSwitch('OFFICER')}
-            className={`px-2.5 py-1 rounded text-xs font-medium flex items-center gap-1 transition-colors ${
-              user?.role === 'OFFICER'
-                ? 'bg-indigo-600 text-white shadow font-bold'
-                : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-            }`}
-            title="Switch to Scrutiny Officer (Real JWT)"
-          >
-            <ShieldCheck className="w-3.5 h-3.5" />
-            <span>Scrutiny Officer</span>
-          </button>
-
-          <button
             onClick={() => handleRoleSwitch('ADMIN')}
             className={`px-2.5 py-1 rounded text-xs font-medium flex items-center gap-1 transition-colors ${
               user?.role === 'ADMIN'
@@ -97,7 +84,7 @@ export const RoleSwitcherBanner: React.FC = () => {
               className="bg-amber-600 hover:bg-amber-500 text-white font-medium px-2 py-0.5 rounded text-[11px] flex items-center gap-1"
             >
               <UserCheck className="w-3 h-3" />
-              Go to Officer Desk
+              Go to Admin Desk
             </Link>
           )}
 

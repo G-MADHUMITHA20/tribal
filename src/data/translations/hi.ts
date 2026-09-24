@@ -22,8 +22,6 @@ export const hi: Record<TranslationKey, string> = {
   decreaseFontSize: 'फ़ॉन्ट छोटा करें',
   defaultFontSize: 'डिफ़ॉल्ट फ़ॉन्ट आकार',
   increaseFontSize: 'फ़ॉन्ट बड़ा करें',
-  toggleHighContrastMode: 'हाई कॉन्ट्रास्ट मोड बदलें',
-  highContrast: 'हाई कॉन्ट्रास्ट',
   searchSchemes: 'योजनाएं, दिशानिर्देश खोजें...',
   explore: 'खोजें',
   services: 'सेवाएं',

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Outlet, NavLink, Link, useLocation } from 'react-router-dom';
+import { Outlet, NavLink, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 
 import { GovHeader } from '../components/common/GovHeader';
@@ -13,12 +13,13 @@ import {
   AlertTriangle,
   User,
   ShieldCheck,
-  ChevronRight
+  ArrowLeft
 } from 'lucide-react';
 
 export const ApplicantLayout: React.FC = () => {
   const { currentUser, currentApplicantApplication } = useApp();
   const location = useLocation();
+  const navigate = useNavigate();
 
   const app = currentApplicantApplication;
 
@@ -87,6 +88,16 @@ export const ApplicantLayout: React.FC = () => {
       {/* Secondary Citizen Portal Navigation */}
       <div className="bg-white border-b border-slate-200 shadow-sm sticky top-0 z-30">
         <div className="max-w-7xl mx-auto px-4 flex items-center gap-1 overflow-x-auto py-1">
+          <button
+            type="button"
+            onClick={() => navigate(-1)}
+            className="mr-2 flex items-center gap-1.5 rounded px-3 py-2 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-100 hover:text-blue-900 focus:outline-none focus:ring-2 focus:ring-blue-700"
+            title="Go back to the previous page"
+            aria-label="Go back to the previous page"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>Back</span>
+          </button>
           {navItems.map((item) => (
             <NavLink
               key={item.to}

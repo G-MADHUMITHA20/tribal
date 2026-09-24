@@ -36,8 +36,6 @@ interface AppContextType {
   increaseFontSize: () => void;
   decreaseFontSize: () => void;
   resetFontSize: () => void;
-  highContrast: boolean;
-  toggleHighContrast: () => void;
 
 
   // Schemes (Dynamic Configuration)
@@ -261,7 +259,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const translationTextNodes = useRef(new Map<Text, string>());
   const translationAttributes = useRef(new Map<HTMLElement, Map<string, string>>());
   const [fontSizeMultiplier, setFontSizeMultiplier] = useState<number>(1);
-  const [highContrast, setHighContrast] = useState<boolean>(false);
   const [schemes, setSchemes] = useState<SchemeConfig[]>(MOTA_SCHEMES);
   const [isLoadingSchemes, setIsLoadingSchemes] = useState<boolean>(false);
   const [applications, setApplications] = useState<ApplicationRecord[]>([]);
@@ -376,15 +373,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     document.documentElement.style.fontSize = `${fontSizeMultiplier * 100}%`;
   }, [fontSizeMultiplier]);
 
-  // Apply high contrast
-  useEffect(() => {
-    if (highContrast) {
-      document.body.classList.add('high-contrast');
-    } else {
-      document.body.classList.remove('high-contrast');
-    }
-  }, [highContrast]);
-
   // Fetch applications whenever authUser changes
   const fetchApplications = async () => {
     if (!authUser) {
@@ -496,10 +484,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const resetFontSize = () => {
     setFontSizeMultiplier(1);
-  };
-
-  const toggleHighContrast = () => {
-    setHighContrast((prev) => !prev);
   };
 
   const updateScheme = async (updated: SchemeConfig) => {
@@ -910,8 +894,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         increaseFontSize,
         decreaseFontSize,
         resetFontSize,
-        highContrast,
-        toggleHighContrast,
         schemes,
         isLoadingSchemes,
         fetchSchemes,

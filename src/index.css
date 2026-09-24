@@ -19,18 +19,6 @@
     background-color: #f8fafc;
   }
 
-  /* High contrast mode support */
-  .high-contrast {
-    filter: contrast(125%);
-    background-color: #000000 !important;
-    color: #ffffff !important;
-  }
-  
-  .high-contrast * {
-    background-color: transparent !important;
-    color: #ffffff !important;
-    border-color: #ffffff !important;
-  }
 }
 
 /* Custom scrollbars */

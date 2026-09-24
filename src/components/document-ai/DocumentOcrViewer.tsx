@@ -172,7 +172,6 @@ export const DocumentOcrViewer: React.FC<DocumentOcrViewerProps> = ({
                   <th className="px-3 py-2 text-left text-[11px] font-bold uppercase">OCR Extracted Value</th>
                   <th className="px-3 py-2 text-left text-[11px] font-bold uppercase">Declared in Form</th>
                   <th className="px-3 py-2 text-left text-[11px] font-bold uppercase">Validation Outcome</th>
-                  <th className="px-3 py-2 text-left text-[11px] font-bold uppercase">Confidence</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 bg-white">
@@ -204,9 +203,6 @@ export const DocumentOcrViewer: React.FC<DocumentOcrViewerProps> = ({
                           ({field.explanation})
                         </span>
                       </div>
-                    </td>
-                    <td className="px-3 py-2 font-mono text-[11px] text-slate-700">
-                      {(field.confidence * 100).toFixed(0)}%
                     </td>
                   </tr>
                 ))}

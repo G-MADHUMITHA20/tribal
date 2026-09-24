@@ -80,9 +80,9 @@ export const AppRoutes: React.FC = () => {
         </Route>
       </Route>
 
-      {/* 3. Protected Officer & Admin Governance Routes */}
+      {/* 3. Protected Admin Governance Routes */}
       <Route element={<ProtectedRoute />}>
-        <Route element={<RoleRoute allowedRoles={['OFFICER', 'ADMIN']} />}>
+        <Route element={<RoleRoute allowedRoles={['ADMIN']} />}>
           <Route path="/admin" element={<AdminLayout />}>
             <Route index element={<AdminDashboardPage />} />
             <Route path="schemes/:schemeId" element={<AdminSchemeDashboardPage />} />
@@ -93,7 +93,6 @@ export const AppRoutes: React.FC = () => {
             <Route path="audit-logs" element={<AuditLogsPage />} />
             <Route path="grievances" element={<GrievanceQueuePage />} />
           </Route>
-          <Route path="/officer" element={<Navigate to="/admin" replace />} />
         </Route>
       </Route>
 

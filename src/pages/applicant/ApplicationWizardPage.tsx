@@ -257,11 +257,6 @@ export const ApplicationWizardPage: React.FC = () => {
           <div className="space-y-0.5 flex-1">
             <div className="font-bold flex items-center gap-2">
               <span>Verified Document Type: {ocr.detectedType}</span>
-              {ocr.confidenceScore && (
-                <span className="px-1.5 py-0.2 bg-emerald-200 text-emerald-900 text-[10px] rounded font-mono">
-                  {Math.round(ocr.confidenceScore * 100)}% Match
-                </span>
-              )}
             </div>
             <p className="text-[11px] text-emerald-800">{ocr.message}</p>
             {ocr.extractedFields && Object.keys(ocr.extractedFields).length > 0 && (

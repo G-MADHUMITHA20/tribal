@@ -18,8 +18,6 @@ export const en = {
   decreaseFontSize: 'Decrease font size',
   defaultFontSize: 'Default font size',
   increaseFontSize: 'Increase font size',
-  toggleHighContrastMode: 'Toggle High Contrast Mode',
-  highContrast: 'High Contrast',
   searchSchemes: 'Search schemes, guidelines...',
   explore: 'Explore',
   services: 'Services',

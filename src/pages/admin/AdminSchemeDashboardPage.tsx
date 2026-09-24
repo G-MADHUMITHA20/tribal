@@ -74,8 +74,8 @@ export const AdminSchemeDashboardPage: React.FC = () => {
     <div className="space-y-6">
       {/* Header */}
       <div className="bg-white p-5 rounded border border-slate-300 shadow-sm">
-        <Link to="/admin" className="text-blue-700 hover:text-blue-900 font-bold text-xs flex items-center gap-1 mb-3 inline-flex">
-          <ArrowLeft className="w-3.5 h-3.5" /> Back to Schemes
+        <Link to="/admin" className="text-blue-700 hover:text-blue-900 font-bold text-xs inline-block mb-3">
+          <ArrowLeft className="w-3.5 h-3.5 mr-1 align-middle" /> Back to Schemes
         </Link>
         <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
           <div>

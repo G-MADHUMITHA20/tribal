@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
-import { Search, Eye, User, LogIn, UserPlus, LogOut, LayoutDashboard, Bell, X, CheckCircle2, Grid, Compass, ChevronDown, RotateCcw } from 'lucide-react';
+import { Search, User, LogIn, UserPlus, LogOut, LayoutDashboard, Bell, X, CheckCircle2, Grid, Compass, ChevronDown, RotateCcw, Volume2, VolumeX } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 
 export const GovHeader: React.FC = () => {
@@ -10,13 +10,21 @@ export const GovHeader: React.FC = () => {
     setLanguage,
     increaseFontSize,
     decreaseFontSize,
-    resetFontSize,
-    toggleHighContrast
+    resetFontSize
   } = useApp();
 
   const { isAuthenticated, user, logout } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
+  const [isReading, setIsReading] = useState(false);
+  const speechRunRef = useRef(0);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    return () => {
+      speechRunRef.current += 1;
+      window.speechSynthesis?.cancel();
+    };
+  }, []);
 
   const { adminNotifications = [], markNotificationAsRead } = useApp();
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
@@ -50,6 +58,51 @@ export const GovHeader: React.FC = () => {
     navigate('/login');
   };
 
+  const handleScreenReader = () => {
+    if (!('speechSynthesis' in window)) return;
+
+    if (isReading) {
+      speechRunRef.current += 1;
+      window.speechSynthesis.cancel();
+      setIsReading(false);
+      return;
+    }
+
+    const mainContent = document.querySelector('main')?.innerText || document.body.innerText;
+    const readableText = mainContent.replace(/\s+/g, ' ').trim();
+    if (!readableText) return;
+
+    const chunks = readableText.match(/.{1,220}(?:\s|$)/g)?.map((chunk) => chunk.trim()).filter(Boolean) || [readableText];
+    const runId = speechRunRef.current + 1;
+    speechRunRef.current = runId;
+    const targetLanguage = language === 'HI' ? 'hi' : 'en';
+    const preferredVoice = window.speechSynthesis
+      .getVoices()
+      .find((voice) => voice.lang.toLowerCase().startsWith(targetLanguage));
+
+    window.speechSynthesis.cancel();
+    setIsReading(true);
+
+    const speakChunk = (index: number) => {
+      if (speechRunRef.current !== runId || index >= chunks.length) {
+        if (speechRunRef.current === runId) setIsReading(false);
+        return;
+      }
+
+      const utterance = new SpeechSynthesisUtterance(chunks[index]);
+      utterance.lang = language === 'HI' ? 'hi-IN' : 'en-IN';
+      utterance.rate = 0.95;
+      if (preferredVoice) utterance.voice = preferredVoice;
+      utterance.onend = () => speakChunk(index + 1);
+      utterance.onerror = () => {
+        if (speechRunRef.current === runId) setIsReading(false);
+      };
+      window.speechSynthesis.speak(utterance);
+    };
+
+    speakChunk(0);
+  };
+
   return (
     <header className="bg-white border-b border-slate-200">
       {/* Top micro-bar: Accessibility, Language, Tricolor strip */}
@@ -79,6 +132,24 @@ export const GovHeader: React.FC = () => {
             </a>
 
             <div className="h-3 w-px bg-slate-300 hidden md:block"></div>
+
+            <button
+              type="button"
+              onClick={handleScreenReader}
+              className={`border rounded px-1.5 py-0.5 flex items-center gap-1 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-600 ${
+                isReading
+                  ? 'border-blue-700 bg-blue-700 text-white'
+                  : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+              }`}
+              title={isReading ? 'Stop reading page' : 'Read page aloud'}
+              aria-label={isReading ? 'Stop reading page' : 'Read page aloud'}
+              aria-pressed={isReading}
+            >
+              {isReading ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
+              <span className="text-[11px] font-medium hidden sm:inline">
+                {isReading ? 'Stop' : 'Read aloud'}
+              </span>
+            </button>
 
             {/* Font size adjustments */}
             <div className="flex items-center gap-1 border border-slate-300 rounded bg-white px-1 py-0.5">
@@ -110,17 +181,6 @@ export const GovHeader: React.FC = () => {
                 A+
               </button>
             </div>
-
-            {/* High Contrast */}
-            <button
-              onClick={toggleHighContrast}
-              className="border border-slate-300 rounded bg-white px-1.5 py-0.5 flex items-center gap-1 hover:bg-slate-50 text-slate-700"
-              title="Toggle High Contrast Mode"
-              aria-label="Toggle High Contrast"
-            >
-              <Eye className="w-3 h-3 text-slate-600" />
-              <span className="text-[11px] font-medium hidden sm:inline">Contrast</span>
-            </button>
 
             <div className="h-3 w-px bg-slate-300"></div>
 

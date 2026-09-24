@@ -4,7 +4,7 @@ from fastapi import FastAPI, status, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.database.mongodb import db_manager, get_database
-from app.services.application_service import seed_schemes_if_empty, seed_users_if_empty
+from app.services.application_service import seed_schemes_if_empty, seed_users_if_empty, seed_applications_if_empty
 
 # Routers
 from app.routes.auth import router as auth_router, ensure_user_indexes
@@ -34,6 +34,7 @@ async def lifespan(app: FastAPI):
         if is_connected and db_manager.db is not None:
             await seed_schemes_if_empty(db_manager.db)
             await seed_users_if_empty(db_manager.db)
+            await seed_applications_if_empty(db_manager.db)
             await ensure_user_indexes(db_manager.db)
             await ensure_profile_indexes(db_manager.db)
             logger.info("MongoDB initialized, scheme and role seed data ensured, unique indexes created.")
