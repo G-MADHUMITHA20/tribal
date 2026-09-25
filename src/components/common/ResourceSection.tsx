@@ -3,6 +3,53 @@ import { OFFICIAL_RESOURCES, ResourceItem } from '../../data/resources';
 import { FileText, Download, Calendar, Tag, ExternalLink, Search } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 
+const pdfSafeText = (value: string) => value
+  .normalize('NFKD')
+  .replace(/[^\x20-\x7E]/g, '?')
+  .replace(/[\\()]/g, '\\$&');
+
+const createResourcePdf = (item: ResourceItem, language: 'EN' | 'HI') => {
+  const title = language === 'HI' ? item.titleHi : item.title;
+  const description = language === 'HI' ? item.descriptionHi : item.description;
+  const lines = [
+    title,
+    '',
+    `Category: ${item.category}`,
+    `Reference: ${item.referenceNumber || 'Not specified'}`,
+    `Published: ${item.publishDate}`,
+    '',
+    description,
+    '',
+    'MoTA Scholarship and Fellowship Management System'
+  ];
+  const content = [
+    'BT',
+    '/F1 14 Tf',
+    '50 760 Td',
+    ...lines.map((line, index) => `${index === 0 ? '' : '0 -22 Td '}(${pdfSafeText(line)}) Tj`),
+    'ET'
+  ].join('\n');
+  const objects = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>',
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+    `<< /Length ${content.length} >>\nstream\n${content}\nendstream`
+  ];
+
+  let pdf = '%PDF-1.4\n';
+  const offsets = [0];
+  objects.forEach((object, index) => {
+    offsets.push(new TextEncoder().encode(pdf).length);
+    pdf += `${index + 1} 0 obj\n${object}\nendobj\n`;
+  });
+  const xrefOffset = new TextEncoder().encode(pdf).length;
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  pdf += offsets.slice(1).map((offset) => `${String(offset).padStart(10, '0')} 00000 n \n`).join('');
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
+  return new Blob([pdf], { type: 'application/pdf' });
+};
+
 export const ResourceSection: React.FC = () => {
   const { language } = useApp();
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
@@ -112,17 +159,24 @@ export const ResourceSection: React.FC = () => {
 
               {/* Action Button */}
               <div className="flex-shrink-0">
-                <a
-                  href={item.downloadUrl}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    alert(`Simulated PDF Download: ${item.title}`);
+                <button
+                  type="button"
+                  onClick={() => {
+                    const blob = createResourcePdf(item, language);
+                    const url = URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = `${item.id}-${item.category.toLowerCase()}.pdf`;
+                    document.body.appendChild(link);
+                    link.click();
+                    link.remove();
+                    URL.revokeObjectURL(url);
                   }}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-blue-50 text-blue-900 font-semibold text-xs border border-blue-300 rounded shadow-sm transition-colors"
                 >
                   <Download className="w-3.5 h-3.5 text-blue-800" />
                   <span>{language === 'HI' ? 'डाउनलोड' : 'Download'} {item.fileSize || 'PDF'}</span>
-                </a>
+                </button>
               </div>
             </div>
           ))

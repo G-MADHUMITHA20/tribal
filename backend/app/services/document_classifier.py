@@ -301,7 +301,7 @@ def classify_document_text(text: str, required_type: str) -> Dict[str, Any]:
             "required_type": norm_required,
             "confidence": confidence,
             "is_acceptable": True,
-            "message": f"Document type matches: {required_display} verified ({int(confidence * 100)}% confidence).",
+            "message": f"Document type matches: {required_display} verified.",
             "char_count": char_count,
             "matched_keywords": matched_keywords.get(norm_required, []),
             "scores": scores
@@ -315,7 +315,7 @@ def classify_document_text(text: str, required_type: str) -> Dict[str, Any]:
             "required_type": norm_required,
             "confidence": best_score,
             "is_acceptable": False,
-            "message": f"Uploaded document appears to be a {detected_display} ({int(best_score * 100)}% confidence), but scheme requires {required_display}. Please upload the correct document.",
+            "message": f"Uploaded document appears to be a {detected_display}, but scheme requires {required_display}. Please upload the correct document.",
             "char_count": char_count,
             "matched_keywords": matched_keywords.get(best_doc_type, []),
             "scores": scores
@@ -329,7 +329,7 @@ def classify_document_text(text: str, required_type: str) -> Dict[str, Any]:
             "required_type": norm_required,
             "confidence": required_score,
             "is_acceptable": True,
-            "message": f"Document partially identified as {required_display} ({int(required_score * 100)}% confidence). Flagged for manual review by verification officer.",
+            "message": f"Document partially identified as {required_display}. Flagged for manual review by verification officer.",
             "char_count": char_count,
             "matched_keywords": matched_keywords.get(norm_required, []),
             "scores": scores
@@ -342,7 +342,7 @@ def classify_document_text(text: str, required_type: str) -> Dict[str, Any]:
         "required_type": norm_required,
         "confidence": best_score,
         "is_acceptable": False,
-        "message": f"Unable to confidently read or classify this document ({int(best_score * 100)}% confidence). Please upload a clearer scan of your {required_display}.",
+        "message": f"Unable to read or classify this document. Please upload a clearer scan of your {required_display}.",
         "char_count": char_count,
         "matched_keywords": [],
         "scores": scores

@@ -112,7 +112,6 @@ export const ApplicationWizardPage: React.FC = () => {
     status: 'IDLE' | 'READING' | 'CHECKING' | 'TYPE_MATCH' | 'TYPE_MISMATCH' | 'LOW_QUALITY' | 'MANUAL_REVIEW' | 'ERROR';
     detectedType?: string | null;
     requiredType?: string;
-    confidenceScore?: number;
     extractedSnippet?: string;
     extractedFields?: Record<string, any>;
     message?: string;
@@ -202,7 +201,6 @@ export const ApplicationWizardPage: React.FC = () => {
           status: res.match_status as any,
           detectedType: res.detected_document_type,
           requiredType: res.required_document_type,
-          confidenceScore: res.confidence,
           extractedFields: res.extracted_fields,
           message: res.message,
           fileName: file.name
@@ -219,7 +217,6 @@ export const ApplicationWizardPage: React.FC = () => {
             status: vr.verification_status || 'TYPE_MISMATCH',
             detectedType: vr.detected_document_type,
             requiredType: vr.required_document_type,
-            confidenceScore: vr.confidence_score,
             extractedSnippet: vr.extracted_text_snippet,
             extractedFields: vr.extracted_fields,
             message: vr.message || errorDetail.message,
@@ -2074,7 +2071,6 @@ export const ApplicationWizardPage: React.FC = () => {
                 status: ocrStates.ST.status,
                 message: ocrStates.ST.message,
                 detectedType: ocrStates.ST.detectedType || undefined,
-                confidence: ocrStates.ST.confidenceScore,
                 extractedFields: ocrStates.ST.extractedFields
               } : undefined}
             />
@@ -2090,7 +2086,6 @@ export const ApplicationWizardPage: React.FC = () => {
                 status: ocrStates.INC.status,
                 message: ocrStates.INC.message,
                 detectedType: ocrStates.INC.detectedType || undefined,
-                confidence: ocrStates.INC.confidenceScore,
                 extractedFields: ocrStates.INC.extractedFields
               } : undefined}
             />
@@ -2106,7 +2101,6 @@ export const ApplicationWizardPage: React.FC = () => {
                   status: ocrStates.MARK.status,
                   message: ocrStates.MARK.message,
                   detectedType: ocrStates.MARK.detectedType || undefined,
-                  confidence: ocrStates.MARK.confidenceScore,
                   extractedFields: ocrStates.MARK.extractedFields
                 } : undefined}
               />

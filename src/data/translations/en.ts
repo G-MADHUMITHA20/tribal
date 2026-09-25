@@ -134,7 +134,7 @@ export const phrases = {
   'Document & OCR Verification': 'Document & OCR Verification',
   'Eligibility Verification': 'Eligibility Verification',
   'Application received and registered successfully on MoTA portal.': 'Application received and registered successfully on MoTA portal.',
-  'All mandatory certificates verified with statutory confidence score.': 'All mandatory certificates verified with statutory confidence score.',
+  'All mandatory certificates verified against required checks.': 'All mandatory certificates verified against required checks.',
   'Applications Open': 'Applications Open',
   'Online Applications OPEN': 'Online Applications OPEN',
   'Online Applications CLOSED': 'Online Applications CLOSED',

@@ -16,7 +16,6 @@ interface DocumentOcrViewerProps {
     status: string;
     message?: string;
     detectedType?: string;
-    confidence?: number;
     extractedFields?: Record<string, string | null>;
   };
 }

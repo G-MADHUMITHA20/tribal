@@ -137,7 +137,7 @@ export const hiPhrases: Record<PhraseKey, string> = {
   'Document & OCR Verification': 'दस्तावेज़ एवं ओसीआर सत्यापन',
   'Eligibility Verification': 'पात्रता सत्यापन',
   'Application received and registered successfully on MoTA portal.': 'आवेदन MoTA पोर्टल पर सफलतापूर्वक प्राप्त और पंजीकृत किया गया।',
-  'All mandatory certificates verified with statutory confidence score.': 'सभी अनिवार्य प्रमाणपत्र वैधानिक विश्वास स्कोर के साथ सत्यापित हैं।',
+  'All mandatory certificates verified against required checks.': 'सभी अनिवार्य प्रमाणपत्र आवश्यक जांच के आधार पर सत्यापित हैं।',
   'Applications Open': 'आवेदन खुले हैं',
   'Online Applications OPEN': 'ऑनलाइन आवेदन खुले हैं',
   'Online Applications CLOSED': 'ऑनलाइन आवेदन बंद हैं',

@@ -43,7 +43,7 @@ export const StatusTimeline: React.FC<StatusTimelineProps> = ({
       date: application.lastUpdated,
       remarks: application.status === 'DEFICIENT'
         ? application.deficiencyNotes || 'Deficiency detected in certificate validity.'
-        : 'All mandatory certificates verified with statutory confidence score.'
+        : 'All mandatory certificates verified against required checks.'
     },
     {
       index: 3,
